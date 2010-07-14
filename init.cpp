@@ -61,7 +61,7 @@ void Shutdown(void* parg)
 #ifdef __WXMSW__
 string StartupShortcutPath()
 {
-    return MyGetSpecialFolderPath(CSIDL_STARTUP, true) + "\\Bitcoin.lnk";
+    return MyGetSpecialFolderPath(CSIDL_STARTUP, true) + "\\BitcoinTEST.lnk";
 }
 
 bool GetStartOnSystemStartup()
@@ -136,7 +136,7 @@ boost::filesystem::path GetAutostartDir()
 
 boost::filesystem::path GetAutostartFilePath()
 {
-    return GetAutostartDir() / boost::filesystem::path("bitcoin.desktop");
+    return GetAutostartDir() / boost::filesystem::path("bitcoinTEST.desktop");
 }
 
 bool GetStartOnSystemStartup()
@@ -180,7 +180,7 @@ void SetStartOnSystemStartup(bool fAutoStart)
         readlink("/proc/self/exe", pszExePath, sizeof(pszExePath)-1);
         optionFile << "[Desktop Entry]\n";
         optionFile << "Type=Application\n";
-        optionFile << "Name=Bitcoin\n";
+        optionFile << "Name=BitcoinTEST\n";
         optionFile << "Exec=" << pszExePath << "\n";
         optionFile << "Terminal=false\n";
         optionFile << "Hidden=false\n";
@@ -339,9 +339,9 @@ bool CMyApp::OnInit2()
     wxImage::AddHandler(new wxPNGHandler);
 #endif
 #if defined(__WXMSW__ ) || defined(__WXMAC__)
-    SetAppName("Bitcoin");
+    SetAppName("BitcoinTEST");
 #else
-    SetAppName("bitcoin");
+    SetAppName("bitcoinTEST");
 #endif
 #ifndef __WXMSW__
     umask(077);
@@ -425,7 +425,7 @@ bool CMyApp::OnInit2()
     if (!fDebug && !pszSetDataDir[0])
         ShrinkDebugFile();
     printf("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
-    printf("Bitcoin version %d.%d.%d%s beta, OS version %s\n", VERSION/10000, (VERSION/100)%100, VERSION%100, pszSubVer, ((string)wxGetOsDescription()).c_str());
+    printf("BitcoinTEST version %d.%d.%d%s beta, OS version %s\n", VERSION/10000, (VERSION/100)%100, VERSION%100, pszSubVer, ((string)wxGetOsDescription()).c_str());
     printf("System default language is %d %s\n", m_locale.GetSystemLanguage(), ((string)m_locale.GetSysName()).c_str());
     printf("Language file %s (%s)\n", (string("locale/") + (string)m_locale.GetCanonicalName() + "/LC_MESSAGES/bitcoin.mo").c_str(), ((string)m_locale.GetLocale()).c_str());
     printf("Default data directory %s\n", GetDefaultDataDir().c_str());
@@ -444,7 +444,7 @@ bool CMyApp::OnInit2()
     //
 #ifdef __WXMSW__
     // todo: wxSingleInstanceChecker wasn't working on Linux, never deleted its lock file
-    //  maybe should go by whether successfully bind port 8333 instead
+    //  maybe should go by whether successfully bind port 18333 instead
     wxString strMutexName = wxString("bitcoin_running.") + getenv("HOMEPATH");
     for (int i = 0; i < strMutexName.size(); i++)
         if (!isalnum(strMutexName[i]))
@@ -458,7 +458,7 @@ bool CMyApp::OnInit2()
         {
             // TODO: find out how to do this in Linux, or replace with wxWidgets commands
             // Show the previous instance and exit
-            HWND hwndPrev = FindWindowA("wxWindowClassNR", "Bitcoin");
+            HWND hwndPrev = FindWindowA("wxWindowClassNR", "BitcoinTEST");
             if (hwndPrev)
             {
                 if (IsIconic(hwndPrev))

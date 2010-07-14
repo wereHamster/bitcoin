@@ -744,7 +744,7 @@ void ThreadRPCServer2(void* parg)
 
     // Bind to loopback 127.0.0.1 so the socket can only be accessed locally
     boost::asio::io_service io_service;
-    tcp::endpoint endpoint(boost::asio::ip::address_v4::loopback(), 8332);
+    tcp::endpoint endpoint(boost::asio::ip::address_v4::loopback(), 18332);
     tcp::acceptor acceptor(io_service, endpoint);
 
     loop
@@ -815,7 +815,7 @@ void ThreadRPCServer2(void* parg)
 Value CallRPC(const string& strMethod, const Array& params)
 {
     // Connect to localhost
-    tcp::iostream stream("127.0.0.1", "8332");
+    tcp::iostream stream("127.0.0.1", "18332");
     if (stream.fail())
         throw runtime_error("couldn't connect to server");
 
