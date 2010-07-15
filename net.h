@@ -51,7 +51,7 @@ bool StopNode();
 // The message start string is designed to be unlikely to occur in normal data.
 // The characters are rarely used upper ascii, not valid as UTF-8, and produce
 // a large 4-byte int at any alignment.
-static const char pchMessageStart[4] = { 0xf9, 0xbe, 0xb4, 0xd9 };
+static const char pchMessageStart[4] = { 0xfa, 0xbf, 0xb5, 0xda };
 
 class CMessageHeader
 {
