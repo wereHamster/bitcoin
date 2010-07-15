@@ -1578,9 +1578,19 @@ bool LoadBlockIndex(bool fAllowNew)
         block.hashPrevBlock = 0;
         block.hashMerkleRoot = block.BuildMerkleTree();
         block.nVersion = 1;
-        block.nTime    = 1279158705;
-        block.nBits    = 0x1f00ffff;
-        block.nNonce   = 80731;
+        block.nTime    = 1279158706;
+        block.nBits    = 0x1d00ffff;
+        block.nNonce   = 0;
+
+        uint256 hashTarget = CBigNum().SetCompact(block.nBits).getuint256();
+        while (block.GetHash() > hashTarget) {
+            ++block.nNonce;
+            if (block.nNonce == 0)
+            {
+                printf("NONCE WRAPPED, incrementing time");
+                ++block.nTime;
+            }
+        }
 
             //// debug print
             printf("%s\n", block.GetHash().ToString().c_str());
