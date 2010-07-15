@@ -21,7 +21,7 @@ unsigned int nTransactionsUpdated = 0;
 map<COutPoint, CInPoint> mapNextTx;
 
 map<uint256, CBlockIndex*> mapBlockIndex;
-const uint256 hashGenesisBlock("0000005a6769cab3473db6ab0b0ca915e160313ca60717d01f4227d4747fa94f");
+const uint256 hashGenesisBlock("0000fe5caf4c21b3bdec215b4ad19800a45aef142af856e629e6b8030e5c3142");
 CBlockIndex* pindexGenesisBlock = NULL;
 int nBestHeight = -1;
 uint256 hashBestChain = 0;
@@ -1554,9 +1554,9 @@ bool LoadBlockIndex(bool fAllowNew)
         // txNew.vout[0].nValue       = 5000000000
         // txNew.vout[0].scriptPubKey = 0x5F1DF16B2B704C8A578D0BBAF74D385CDE12C11EE50455F3C438EF4C3FBCF649B6DE611FEAE06279A60939E028A8D65C10B73071A6F16719274855FEB0FD8A6704 OP_CHECKSIG
         // block.nVersion = 1
-        // block.nTime    = 1279158705;
+        // block.nTime    = 1279158706;
         // block.nBits    = 0x1f00ffff
-        // block.nNonce   = 80731
+        // block.nNonce   = 87528
         // CBlock(hash=000000000019d6, ver=1, hashPrevBlock=00000000000000, hashMerkleRoot=4a5e1e, nTime=1231006505, nBits=1d00ffff, nNonce=2083236893, vtx=1)
         //   CTransaction(hash=4a5e1e, ver=1, vin.size=1, vout.size=1, nLockTime=0)
         //     CTxIn(COutPoint(000000, -1), coinbase 04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73)
@@ -1579,8 +1579,8 @@ bool LoadBlockIndex(bool fAllowNew)
         block.hashMerkleRoot = block.BuildMerkleTree();
         block.nVersion = 1;
         block.nTime    = 1279158706;
-        block.nBits    = 0x1d00ffff;
-        block.nNonce   = 0;
+        block.nBits    = 0x1f00ffff;
+        block.nNonce   = 87528;
 
         uint256 hashTarget = CBigNum().SetCompact(block.nBits).getuint256();
         while (block.GetHash() > hashTarget) {
