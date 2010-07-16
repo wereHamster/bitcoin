@@ -802,6 +802,7 @@ void ThreadSocketHandler2(void* parg)
 
 unsigned int pnSeed[] =
 {
+    0x0,
 };
 
 
