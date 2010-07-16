@@ -21,7 +21,7 @@ unsigned int nTransactionsUpdated = 0;
 map<COutPoint, CInPoint> mapNextTx;
 
 map<uint256, CBlockIndex*> mapBlockIndex;
-const uint256 hashGenesisBlock("0000fe5caf4c21b3bdec215b4ad19800a45aef142af856e629e6b8030e5c3142");
+const uint256 hashGenesisBlock("0000000224b1593e3ff16a0e3b61285bbc393a39f78c8aa48c456142671f7110");
 CBlockIndex* pindexGenesisBlock = NULL;
 int nBestHeight = -1;
 uint256 hashBestChain = 0;
@@ -824,11 +824,11 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast)
 
     // Limit adjustment step
     unsigned int nActualTimespan = pindexLast->nTime - pindexFirst->nTime;
-    printf("  nActualTimespan = %d  before bounds\n", nActualTimespan);
-    if (nActualTimespan < nTargetTimespan/4)
-        nActualTimespan = nTargetTimespan/4;
-    if (nActualTimespan > nTargetTimespan*4)
-        nActualTimespan = nTargetTimespan*4;
+//    printf("  nActualTimespan = %d  before bounds\n", nActualTimespan);
+//    if (nActualTimespan < nTargetTimespan/4)
+//        nActualTimespan = nTargetTimespan/4;
+//    if (nActualTimespan > nTargetTimespan*4)
+//        nActualTimespan = nTargetTimespan*4;
 
     // Retarget
     CBigNum bnNew;
@@ -1548,15 +1548,15 @@ bool LoadBlockIndex(bool fAllowNew)
 
 
         // Genesis Block:
-        // GetHash()      = 0x0000005a6769cab3473db6ab0b0ca915e160313ca60717d01f4227d4747fa94f
+        // GetHash()      = 0x0000000c763ae503ea763aed63710fbe4922b365ef81b8c6b60235bd734a8b58
         // hashMerkleRoot = 0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b
         // txNew.vin[0].scriptSig     = 486604799 4 0x736B6E616220726F662074756F6C69616220646E6F63657320666F206B6E697262206E6F20726F6C6C65636E61684320393030322F6E614A2F33302073656D695420656854
         // txNew.vout[0].nValue       = 5000000000
         // txNew.vout[0].scriptPubKey = 0x5F1DF16B2B704C8A578D0BBAF74D385CDE12C11EE50455F3C438EF4C3FBCF649B6DE611FEAE06279A60939E028A8D65C10B73071A6F16719274855FEB0FD8A6704 OP_CHECKSIG
         // block.nVersion = 1
         // block.nTime    = 1279158706;
-        // block.nBits    = 0x1f00ffff
-        // block.nNonce   = 87528
+        // block.nBits    = 0x1d00ffff
+        // block.nNonce   = 166609192
         // CBlock(hash=000000000019d6, ver=1, hashPrevBlock=00000000000000, hashMerkleRoot=4a5e1e, nTime=1231006505, nBits=1d00ffff, nNonce=2083236893, vtx=1)
         //   CTransaction(hash=4a5e1e, ver=1, vin.size=1, vout.size=1, nLockTime=0)
         //     CTxIn(COutPoint(000000, -1), coinbase 04ffff001d0104455468652054696d65732030332f4a616e2f32303039204368616e63656c6c6f72206f6e206272696e6b206f66207365636f6e64206261696c6f757420666f722062616e6b73)
@@ -1578,12 +1578,14 @@ bool LoadBlockIndex(bool fAllowNew)
         block.hashPrevBlock = 0;
         block.hashMerkleRoot = block.BuildMerkleTree();
         block.nVersion = 1;
-        block.nTime    = 1279158706;
-        block.nBits    = 0x1f00ffff;
-        block.nNonce   = 87528;
+        block.nTime    = 1279232055;
+        block.nBits    = 0x1d07fff8;
+        block.nNonce   = 81622180;
 
+        // This will figure out a valid hash and Nonce if you're creating a different genesis block:
         uint256 hashTarget = CBigNum().SetCompact(block.nBits).getuint256();
-        while (block.GetHash() > hashTarget) {
+        while (block.GetHash() > hashTarget)
+        {
             ++block.nNonce;
             if (block.nNonce == 0)
             {
