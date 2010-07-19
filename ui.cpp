@@ -375,14 +375,19 @@ void CMainFrame::OnIconize(wxIconizeEvent& event)
     // to get rid of the deprecated warning.  Just ignore it.
     if (!event.Iconized())
         fClosedToTray = false;
-//#ifdef __WXMSW__
+#ifdef __WXGTK__
+    if (mapArgs.count("-minimizetotray")) {
+#endif
     // The tray icon sometimes disappears on ubuntu karmic
     // Hiding the taskbar button doesn't work cleanly on ubuntu lucid
+    // Reports of CPU peg on 64-bit linux
     if (fMinimizeToTray && event.Iconized())
         fClosedToTray = true;
     Show(!fClosedToTray);
-//#endif
     ptaskbaricon->Show(fMinimizeToTray || fClosedToTray);
+#ifdef __WXGTK__
+    }
+#endif
 }
 
 void CMainFrame::OnMouseEvents(wxMouseEvent& event)
@@ -1127,7 +1132,7 @@ void CMainFrame::OnButtonNew(wxCommandEvent& event)
     // Ask name
     CGetTextFromUserDialog dialog(this,
         _("New Receiving Address"),
-        _("It's good policy to use a new address for each payment you receive.\n\nLabel"),
+        _("You should use a new address for each payment you receive.\n\nLabel"),
         "");
     if (!dialog.ShowModal())
         return;
@@ -1446,6 +1451,14 @@ COptionsDialog::COptionsDialog(wxWindow* parent) : COptionsDialogBase(parent)
     SelectPage(0);
 #ifdef __WXGTK__
     m_checkBoxStartOnSystemStartup->SetLabel(_("&Start Bitcoin on window system startup"));
+    if (!mapArgs.count("-minimizetotray"))
+    {
+        // Minimize to tray is just too buggy on Linux
+        fMinimizeToTray = false;
+        m_checkBoxMinimizeToTray->SetValue(false);
+        m_checkBoxMinimizeToTray->Enable(false);
+        m_checkBoxMinimizeOnClose->SetLabel(_("&Minimize on close"));
+    }
 #endif
 #ifdef __WXMAC_OSX__
     m_checkBoxStartOnSystemStartup->Enable(false); // not implemented yet
@@ -2359,7 +2372,7 @@ void CAddressBookDialog::OnButtonNew(wxCommandEvent& event)
         // Ask name
         CGetTextFromUserDialog dialog(this,
             _("New Receiving Address"),
-            _("It's good policy to use a new address for each payment you receive.\n\nLabel"),
+            _("You should use a new address for each payment you receive.\n\nLabel"),
             "");
         if (!dialog.ShowModal())
             return;
@@ -2536,6 +2549,10 @@ void CreateMainWindow()
     pframeMain = new CMainFrame(NULL);
     if (mapArgs.count("-min"))
         pframeMain->Iconize(true);
+#ifdef __WXGTK__
+    if (!mapArgs.count("-minimizetotray"))
+        fMinimizeToTray = false;
+#endif
     pframeMain->Show(true);  // have to show first to get taskbar button to hide
     if (fMinimizeToTray && pframeMain->IsIconized())
         fClosedToTray = true;
