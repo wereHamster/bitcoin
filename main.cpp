@@ -1341,13 +1341,17 @@ bool CBlock::AcceptBlock()
     if (nBits != GetNextWorkRequired(pindexPrev))
         return error("AcceptBlock() : incorrect proof of work");
 
-    // Check that the block chain matches the known block chain up to a checkpoint
-    if (pindexPrev->nHeight+1 == 11111 && hash != uint256("0x0000000069e244f73d78e8fd29ba2fd2ed618bd6fa2ee92559f542fdb26e7c1d"))
-        return error("AcceptBlock() : rejected by checkpoint lockin at 11111");
-    if (pindexPrev->nHeight+1 == 33333 && hash != uint256("0x000000002dd5588a74784eaa7ab0507a18ad16a236e7b1ce69f00d7ddfb5d0a6"))
-        return error("AcceptBlock() : rejected by checkpoint lockin at 33333");
-    if (pindexPrev->nHeight+1 == 68555 && hash != uint256("0x00000000001e1b4903550a0b96e9a9405c8a95f387162e4944e8d9fbe501cd6a"))
-        return error("AcceptBlock() : rejected by checkpoint lockin at 68555");
+    // production bitcoin locks in blocks for security:
+    if (hashGenesisBlock == uint256("0x000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"))
+    {
+        // Check that the block chain matches the known block chain up to a checkpoint
+        if (pindexPrev->nHeight+1 == 11111 && hash != uint256("0x0000000069e244f73d78e8fd29ba2fd2ed618bd6fa2ee92559f542fdb26e7c1d"))
+            return error("AcceptBlock() : rejected by checkpoint lockin at 11111");
+        if (pindexPrev->nHeight+1 == 33333 && hash != uint256("0x000000002dd5588a74784eaa7ab0507a18ad16a236e7b1ce69f00d7ddfb5d0a6"))
+            return error("AcceptBlock() : rejected by checkpoint lockin at 33333");
+        if (pindexPrev->nHeight+1 == 68555 && hash != uint256("0x00000000001e1b4903550a0b96e9a9405c8a95f387162e4944e8d9fbe501cd6a"))
+            return error("AcceptBlock() : rejected by checkpoint lockin at 68555");
+    }
 
     // Write block to history file
     if (!CheckDiskSpace(::GetSerializeSize(*this, SER_DISK)))
