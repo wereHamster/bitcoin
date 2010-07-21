@@ -6,6 +6,9 @@ Branches here:
 * master : just like the 'production' Bitcoin client (no additional features), but operates on the TEST network.
 * svn : up-to-date mirror of the 'production' Bitcoin (from http://sourceforge.net/projects/bitcoin/).
 
+* monitorreceived : Implements new JSON-RPC command "monitorreceivedbyaddress"
+* refundtransaction : Implements new JSON-RPC command "refundtransaction"
+
 
 Important changes on the master branch are:
 
