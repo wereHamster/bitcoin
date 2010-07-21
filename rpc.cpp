@@ -39,7 +39,7 @@ Value help(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
         throw runtime_error(
-            "help <pw>\n"
+            "help\n"
             "List commands.");
 
     string strRet;
@@ -76,7 +76,7 @@ Value stop(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
         throw runtime_error(
-            "stop <pw>\n"
+            "stop\n"
             "Stop bitcoin server.");
 
     // Shutdown will take long enough that the response should get back
@@ -89,7 +89,7 @@ Value getblockcount(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
         throw runtime_error(
-            "getblockcount <pw>\n"
+            "getblockcount\n"
             "Returns the number of blocks in the longest block chain.");
 
     return nBestHeight + 1;
@@ -100,7 +100,7 @@ Value getblocknumber(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
         throw runtime_error(
-            "getblocknumber <pw>\n"
+            "getblocknumber\n"
             "Returns the block number of the latest block in the longest block chain.");
 
     return nBestHeight;
@@ -111,7 +111,7 @@ Value getconnectioncount(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
         throw runtime_error(
-            "getconnectioncount <pw>\n"
+            "getconnectioncount\n"
             "Returns the number of connections to other nodes.");
 
     return (int)vNodes.size();
@@ -134,7 +134,7 @@ Value getdifficulty(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
         throw runtime_error(
-            "getdifficulty <pw>\n"
+            "getdifficulty\n"
             "Returns the proof-of-work difficulty as a multiple of the minimum difficulty.");
 
     return GetDifficulty();
@@ -145,7 +145,7 @@ Value getbalance(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
         throw runtime_error(
-            "getbalance <pw>\n"
+            "getbalance\n"
             "Returns the server's available balance.");
 
     return ((double)GetBalance() / (double)COIN);
@@ -156,7 +156,7 @@ Value getgenerate(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
         throw runtime_error(
-            "getgenerate <pw>\n"
+            "getgenerate\n"
             "Returns true or false.");
 
     return (bool)fGenerateBitcoins;
@@ -167,7 +167,7 @@ Value setgenerate(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 1 || params.size() > 2)
         throw runtime_error(
-            "setgenerate <pw> <generate> [genproclimit]\n"
+            "setgenerate <generate> [genproclimit]\n"
             "<generate> is true or false to turn generation on or off.\n"
             "Generation is limited to [genproclimit] processors, -1 is unlimited.");
 
@@ -193,7 +193,7 @@ Value getinfo(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 0)
         throw runtime_error(
-            "getinfo <pw>");
+            "getinfo");
 
     Object obj;
     obj.push_back(Pair("balance",       (double)GetBalance() / (double)COIN));
@@ -211,7 +211,7 @@ Value getnewaddress(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 1)
         throw runtime_error(
-            "getnewaddress <pw> [label]\n"
+            "getnewaddress [label]\n"
             "Returns a new bitcoin address for receiving payments.  "
             "If [label] is specified (recommended), it is added to the address book "
             "so payments received with the address will be labeled.");
@@ -233,7 +233,7 @@ Value setlabel(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 1 || params.size() > 2)
         throw runtime_error(
-            "setlabel <pw> <bitcoinaddress> <label>\n"
+            "setlabel <bitcoinaddress> <label>\n"
             "Sets the label associated with the given address.");
 
     string strAddress = params[0].get_str();
@@ -250,7 +250,7 @@ Value getlabel(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 1)
         throw runtime_error(
-            "getlabel <pw> <bitcoinaddress>\n"
+            "getlabel <bitcoinaddress>\n"
             "Returns the label associated with the given address.");
 
     string strAddress = params[0].get_str();
@@ -270,7 +270,7 @@ Value getaddressesbylabel(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() != 1)
         throw runtime_error(
-            "getaddressesbylabel <pw> <label>\n"
+            "getaddressesbylabel <label>\n"
             "Returns the list of addresses with the given label.");
 
     string strLabel = params[0].get_str();
@@ -300,7 +300,7 @@ Value sendtoaddress(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 2 || params.size() > 4)
         throw runtime_error(
-            "sendtoaddress <pw> <bitcoinaddress> <amount> [comment] [comment-to]\n"
+            "sendtoaddress <bitcoinaddress> <amount> [comment] [comment-to]\n"
             "<amount> is a real and is rounded to the nearest 0.01");
 
     string strAddress = params[0].get_str();
@@ -328,7 +328,7 @@ Value listtransactions(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 2)
         throw runtime_error(
-            "listtransactions <pw> [count=10] [includegenerated=false]\n"
+            "listtransactions [count=10] [includegenerated=false]\n"
             "Returns up to [count] most recent transactions.");
 
     int64 nCount = 10;
@@ -349,7 +349,7 @@ Value getreceivedbyaddress(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 1 || params.size() > 2)
         throw runtime_error(
-            "getreceivedbyaddress <pw> <bitcoinaddress> [minconf=1]\n"
+            "getreceivedbyaddress <bitcoinaddress> [minconf=1]\n"
             "Returns the total amount received by <bitcoinaddress> in transactions with at least [minconf] confirmations.");
 
     // Bitcoin address
@@ -390,7 +390,7 @@ Value getreceivedbylabel(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() < 1 || params.size() > 2)
         throw runtime_error(
-            "getreceivedbylabel <pw> <label> [minconf=1]\n"
+            "getreceivedbylabel <label> [minconf=1]\n"
             "Returns the total amount received by addresses with <label> in transactions with at least [minconf] confirmations.");
 
     // Get the set of pub keys that have the label
@@ -553,7 +553,7 @@ Value listreceivedbyaddress(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 2)
         throw runtime_error(
-            "listreceivedbyaddress <pw> [minconf=1] [includeempty=false]\n"
+            "listreceivedbyaddress [minconf=1] [includeempty=false]\n"
             "[minconf] is the minimum number of confirmations before payments are included.\n"
             "[includeempty] whether to include addresses that haven't received any payments.\n"
             "Returns an array of objects containing:\n"
@@ -569,7 +569,7 @@ Value listreceivedbylabel(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 2)
         throw runtime_error(
-            "listreceivedbylabel <pw> [minconf=1] [includeempty=false]\n"
+            "listreceivedbylabel [minconf=1] [includeempty=false]\n"
             "[minconf] is the minimum number of confirmations before payments are included.\n"
             "[includeempty] whether to include labels that haven't received any payments.\n"
             "Returns an array of objects containing:\n"
@@ -751,17 +751,6 @@ void ThreadRPCServer2(void* parg)
 {
     printf("ThreadRPCServer started\n");
 
-    if (mapArgs.count("-rpcpw"))
-        strRPCPassword = mapArgs["-rpcpw"];
-    if (strRPCPassword == "")
-    {
-#if defined(__WXMSW__) && wxUSE_GUI
-        MyMessageBox("Warning: rpc password is blank, use -rpcpw=<password>\n", "Bitcoin", wxOK | wxICON_EXCLAMATION);
-#else
-        fprintf(stdout, "Warning: rpc password is blank, use -rpcpw=<password>\n");
-#endif
-    }
-
     // Bind to loopback 127.0.0.1 so the socket can only be accessed locally
     boost::asio::io_service io_service;
     tcp::endpoint endpoint(boost::asio::ip::address_v4::loopback(), 18332);
@@ -808,23 +797,13 @@ void ThreadRPCServer2(void* parg)
 
                 printf("ThreadRPCServer method=%s\n", strMethod.c_str());
 
-                // Check password
-                if (params.size() < 1 || params[0].type() != str_type)
-                    throw runtime_error("First parameter must be the password.");
-                if (params[0].get_str() != strRPCPassword)
-                {
-                    if (strRPCPassword.size() < 15)
-                        Sleep(50);
-                    begin = strRequest.end();
-                    printf("ThreadRPCServer incorrect password attempt\n");
-                    throw runtime_error("Incorrect password.");
-                }
+                // TODO: implement HTTP basic authentication...
 
                 // Execute
                 map<string, rpcfn_type>::iterator mi = mapCallTable.find(strMethod);
                 if (mi == mapCallTable.end())
                     throw runtime_error("Method not found.");
-                Value result = (*(*mi).second)(Array(params.begin()+1, params.end()), false);
+                Value result = (*(*mi).second)(params, false);
 
                 // Send reply
                 string strReply = JSONRPCReply(result, Value::null, id);
