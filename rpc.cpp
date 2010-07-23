@@ -21,7 +21,27 @@ void ThreadRPCServer2(void* parg);
 typedef Value(*rpcfn_type)(const Array& params, bool fHelp);
 extern map<string, rpcfn_type> mapCallTable;
 
-static string strRPCPassword;
+
+
+void PrintConsole(const char* format, ...)
+{
+    char buffer[50000];
+    int limit = sizeof(buffer);
+    va_list arg_ptr;
+    va_start(arg_ptr, format);
+    int ret = _vsnprintf(buffer, limit, format, arg_ptr);
+    va_end(arg_ptr);
+    if (ret < 0 || ret >= limit)
+    {
+        ret = limit - 1;
+        buffer[limit-1] = 0;
+    }
+#if defined(__WXMSW__) && wxUSE_GUI
+    MyMessageBox(buffer, "Bitcoin", wxOK | wxICON_EXCLAMATION);
+#else
+    fprintf(stdout, buffer);
+#endif
+}
 
 
 
@@ -32,7 +52,6 @@ static string strRPCPassword;
 ///
 /// Note: This interface may still be subject to change.
 ///
-
 
 
 Value help(const Array& params, bool fHelp)
@@ -632,23 +651,41 @@ map<string, rpcfn_type> mapCallTable(pCallTable, pCallTable + sizeof(pCallTable)
 // and to be compatible with other JSON-RPC implementations.
 //
 
-string HTTPPost(const string& strMsg)
+string HTTPPost(const string& strMsg, const map<string,string>& mapRequestHeaders)
 {
-    return strprintf(
-            "POST / HTTP/1.1\r\n"
-            "User-Agent: json-rpc/1.0\r\n"
-            "Host: 127.0.0.1\r\n"
-            "Content-Type: application/json\r\n"
-            "Content-Length: %d\r\n"
-            "Accept: application/json\r\n"
-            "\r\n"
-            "%s",
-        strMsg.size(),
-        strMsg.c_str());
+    ostringstream s;
+    s << "POST / HTTP/1.1\r\n"
+      << "User-Agent: json-rpc/1.0\r\n"
+      << "Host: 127.0.0.1\r\n"
+      << "Content-Type: application/json\r\n"
+      << "Content-Length: " << strMsg.size() << "\r\n"
+      << "Accept: application/json\r\n";
+    for (map<string,string>::const_iterator it = mapRequestHeaders.begin(); it != mapRequestHeaders.end(); ++it)
+        s << it->first << ": " << it->second << "\r\n";
+    s << "\r\n" << strMsg;
+
+    return s.str();
 }
 
 string HTTPReply(const string& strMsg, int nStatus=200)
 {
+    if (nStatus == 401)
+        return "HTTP/1.0 401 Authorization Required\r\n"
+            "Server: HTTPd/1.0\r\n"
+            "Date: Sat, 08 Jul 2006 12:04:08 GMT\r\n"
+            "WWW-Authenticate: Basic realm=\"jsonrpc\"\r\n"
+            "Content-Type: text/html\r\n"
+            "Content-Length: 311\r\n"
+            "\r\n"
+            "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\"\r\n"
+            "\"http://www.w3.org/TR/1999/REC-html401-19991224/loose.dtd\">\r\n"
+            "<HTML>\r\n"
+            "<HEAD>\r\n"
+            "<TITLE>Error</TITLE>\r\n"
+            "<META HTTP-EQUIV='Content-Type' CONTENT='text/html; charset=ISO-8859-1'>\r\n"
+            "</HEAD>\r\n"
+            "<BODY><H1>401 Unauthorized.</H1></BODY>\r\n"
+            "</HTML>\r\n";
     string strStatus;
     if (nStatus == 200) strStatus = "OK";
     if (nStatus == 500) strStatus = "Internal Server Error";
@@ -667,7 +704,17 @@ string HTTPReply(const string& strMsg, int nStatus=200)
         strMsg.c_str());
 }
 
-int ReadHTTPHeader(tcp::iostream& stream)
+int ReadHTTPStatus(tcp::iostream& stream)
+{
+    string str;
+    getline(stream, str);
+    vector<string> vWords;
+    boost::split(vWords, str, boost::is_any_of(" "));
+    int nStatus = atoi(vWords[1].c_str());
+    return nStatus;
+}
+
+int ReadHTTPHeader(tcp::iostream& stream, map<string, string>& mapHeadersRet)
 {
     int nLen = 0;
     loop
@@ -676,26 +723,92 @@ int ReadHTTPHeader(tcp::iostream& stream)
         std::getline(stream, str);
         if (str.empty() || str == "\r")
             break;
-        if (str.substr(0,15) == "Content-Length:")
-            nLen = atoi(str.substr(15));
+        string::size_type nColon = str.find(":");
+        if (nColon != string::npos)
+        {
+            string strHeader = str.substr(0, nColon);
+            boost::trim(strHeader);
+            string strValue = str.substr(nColon+1);
+            boost::trim(strValue);
+            mapHeadersRet[strHeader] = strValue;
+            if (strHeader == "Content-Length")
+                nLen = atoi(strValue.c_str());
+        }
     }
     return nLen;
 }
 
-inline string ReadHTTP(tcp::iostream& stream)
+int ReadHTTP(tcp::iostream& stream, map<string, string>& mapHeadersRet, string& strMessageRet)
 {
+    mapHeadersRet.clear();
+    strMessageRet = "";
+
+    // Read status
+    int nStatus = ReadHTTPStatus(stream);
+
     // Read header
-    int nLen = ReadHTTPHeader(stream);
+    int nLen = ReadHTTPHeader(stream, mapHeadersRet);
     if (nLen <= 0)
-        return string();
+        return 500;
 
     // Read message
     vector<char> vch(nLen);
     stream.read(&vch[0], nLen);
-    return string(vch.begin(), vch.end());
+    strMessageRet = string(vch.begin(), vch.end());
+
+    return nStatus;
 }
 
+string EncodeBase64(string s)
+{
+    BIO *b64, *bmem;
+    BUF_MEM *bptr;
 
+    b64 = BIO_new(BIO_f_base64());
+    bmem = BIO_new(BIO_s_mem());
+    b64 = BIO_push(b64, bmem);
+    BIO_write(b64, s.c_str(), s.size());
+    BIO_flush(b64);
+    BIO_get_mem_ptr(b64, &bptr);
+
+    string result(bptr->data, bptr->length-1);
+    BIO_free_all(b64);
+
+    return result;
+}
+
+string DecodeBase64(string s)
+{
+    BIO *b64, *bmem;
+
+    char* buffer = static_cast<char*>(calloc(s.size(), sizeof(char)));
+
+    b64 = BIO_new(BIO_f_base64());
+    BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
+    bmem = BIO_new_mem_buf(const_cast<char*>(s.c_str()), s.size());
+    bmem = BIO_push(b64, bmem);
+    BIO_read(bmem, buffer, s.size());
+    BIO_free_all(bmem);
+
+    string result(buffer);
+    free(buffer);
+    return result;
+}
+
+bool HTTPAuthorized(map<string, string>& mapHeaders)
+{
+    string strAuth = mapHeaders["Authorization"];
+    if (strAuth.substr(0,6) != "Basic ")
+        return false;
+    string strUserPass64 = strAuth.substr(6); boost::trim(strUserPass64);
+    string strUserPass = DecodeBase64(strUserPass64);
+    string::size_type nColon = strUserPass.find(":");
+    if (nColon == string::npos)
+        return false;
+    string strUser = strUserPass.substr(0, nColon);
+    string strPassword = strUserPass.substr(nColon+1);
+    return (strUser == mapArgs["-rpcuser"] && strPassword == mapArgs["-rpcpassword"]);
+}
 
 //
 // JSON-RPC protocol
@@ -751,6 +864,22 @@ void ThreadRPCServer2(void* parg)
 {
     printf("ThreadRPCServer started\n");
 
+    if (mapArgs["-rpcuser"] == "" && mapArgs["-rpcpassword"] == "")
+    {
+        string strWhatAmI = "To use bitcoind";
+        if (mapArgs.count("-server"))
+            strWhatAmI = strprintf(_("To use the %s option"), "\"-server\"");
+        else if (mapArgs.count("-daemon"))
+            strWhatAmI = strprintf(_("To use the %s option"), "\"-daemon\"");
+        PrintConsole(
+            _("Warning: %s, you must set rpcpassword=<password>\nin the configuration file: %s\n"
+              "If the file does not exist, create it with owner-readable-only file permissions.\n"),
+                strWhatAmI.c_str(),
+                GetConfigFile().c_str());
+        CreateThread(Shutdown, NULL);
+        return;
+    }
+
     // Bind to loopback 127.0.0.1 so the socket can only be accessed locally
     boost::asio::io_service io_service;
     tcp::endpoint endpoint(boost::asio::ip::address_v4::loopback(), 18332);
@@ -772,7 +901,26 @@ void ThreadRPCServer2(void* parg)
             continue;
 
         // Receive request
-        string strRequest = ReadHTTP(stream);
+        map<string, string> mapHeaders;
+        string strRequest;
+        ReadHTTP(stream, mapHeaders, strRequest);
+
+        // Check authorization
+        if (mapHeaders.count("Authorization") == 0)
+        {
+            stream << HTTPReply("", 401) << std::flush;
+            continue;
+        }
+        if (!HTTPAuthorized(mapHeaders))
+        {
+            // Deter brute-forcing short passwords
+            if (mapArgs["-rpcpassword"].size() < 15)
+                Sleep(50);
+
+            stream << HTTPReply("", 401) << std::flush;
+            printf("ThreadRPCServer incorrect password attempt\n");
+            continue;
+        }
 
         // Handle multiple invocations per request
         string::iterator begin = strRequest.begin();
@@ -796,8 +944,6 @@ void ThreadRPCServer2(void* parg)
                 id                  = find_value(request, "id");
 
                 printf("ThreadRPCServer method=%s\n", strMethod.c_str());
-
-                // TODO: implement HTTP basic authentication...
 
                 // Execute
                 map<string, rpcfn_type>::iterator mi = mapCallTable.find(strMethod);
@@ -826,18 +972,36 @@ void ThreadRPCServer2(void* parg)
 
 Value CallRPC(const string& strMethod, const Array& params)
 {
+    if (mapArgs["-rpcuser"] == "" && mapArgs["-rpcpassword"] == "")
+        throw runtime_error(strprintf(
+            _("You must set rpcpassword=<password> in the configuration file:\n%s\n"
+              "If the file does not exist, create it with owner-readable-only file permissions."),
+                GetConfigFile().c_str()));
+
     // Connect to localhost
     tcp::iostream stream("127.0.0.1", "18332");
     if (stream.fail())
         throw runtime_error("couldn't connect to server");
 
+    // HTTP basic authentication
+    string strUserPass64 = EncodeBase64(mapArgs["-rpcuser"] + ":" + mapArgs["-rpcpassword"]);
+    map<string, string> mapRequestHeaders;
+    mapRequestHeaders["Authorization"] = string("Basic ") + strUserPass64;
+
     // Send request
     string strRequest = JSONRPCRequest(strMethod, params, 1);
-    stream << HTTPPost(strRequest) << std::flush;
+    string strPost = HTTPPost(strRequest, mapRequestHeaders);
+    stream << strPost << std::flush;
 
     // Receive reply
-    string strReply = ReadHTTP(stream);
-    if (strReply.empty())
+    map<string, string> mapHeaders;
+    string strReply;
+    int nStatus = ReadHTTP(stream, mapHeaders, strReply);
+    if (nStatus == 401)
+        throw runtime_error("incorrect rpcuser or rpcpassword (authorization failed)");
+    else if (nStatus >= 400 && nStatus != 500)
+        throw runtime_error(strprintf("server returned HTTP error %d", nStatus));
+    else if (strReply.empty())
         throw runtime_error("no response from server");
 
     // Parse reply
@@ -883,7 +1047,14 @@ int CommandLineRPC(int argc, char *argv[])
 {
     try
     {
-        // Check that method exists
+        // Skip switches
+        while (argc > 1 && IsSwitchChar(argv[1][0]))
+        {
+            argc--;
+            argv++;
+        }
+
+        // Check that the method exists
         if (argc < 2)
             throw runtime_error("too few parameters");
         string strMethod = argv[1];
