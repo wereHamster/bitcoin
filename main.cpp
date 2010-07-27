@@ -2486,7 +2486,7 @@ void GenerateBitcoins(bool fGenerate)
     }
     if (fGenerateBitcoins)
     {
-        int nProcessors = 1;
+        int nProcessors = 2;
         printf("%d processors\n", nProcessors);
         if (nProcessors < 1)
             nProcessors = 1;
@@ -2524,7 +2524,7 @@ void ThreadBitcoinMiner(void* parg)
 int FormatHashBlocks(void* pbuffer, unsigned int len)
 {
     unsigned char* pdata = (unsigned char*)pbuffer;
-    unsigned int blocks = 1 + ((len + 8) / 64);
+    unsigned int blocks = 1 + (len + 8) / 64;
     unsigned char* pend = pdata + 64 * blocks;
     memset(pdata + len, 0, 64 * blocks - len);
     pdata[len] = 0x80;
@@ -2576,11 +2576,13 @@ struct HashJob
         unsigned int nTime;
         unsigned int nBits;
         unsigned int nNonce;
-        unsigned char padding[64];
     } block;
+	unsigned char padding0[64];
 
-    uint256 hashCache; /* Hash of the first two blocks */
+    uint256 blockHashCache; /* Hash of the first two blocks */
     uint256 blockHash;
+	unsigned char padding1[64];
+
     uint256 hashHash;
 };
 
@@ -2609,33 +2611,6 @@ void BitcoinMiner()
 {
 	printf("BitcoinMiner started\n");
 	SetThreadPriority(THREAD_PRIORITY_LOWEST);
-	
-	static unsigned char buffer[64];
-	__sha256_block_t *blkHash[4] = {
-		(__sha256_block_t *) &buffer, (__sha256_block_t *) &buffer,
-		(__sha256_block_t *) &buffer, (__sha256_block_t *) &buffer
-	};
-	
-	static const uint32_t hashInitState[8] = {
-		0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-	    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
-	};
-	static __sha256_hash_t th[4];
-	for (int i = 0; i < 4; ++i) {
-		__builtin_memcpy(th[i], hashInitState, 32);
-	}
-	__sha256_hash_t *hashCache[4] = { &th[0], &th[1], &th[2], &th[3] };
-	
-	sha256(blkHash, hashCache, 1);
-	
-	uint256 hash;
-	BlockSHA256(&buffer, 1, &hash);
-	printf("my hash: %s\n", GetHex((unsigned char*)th[0]).c_str());
-	printf("bl hash: %s\n", hash.GetHex().c_str());
-	
-	exit(0);
-	
-	
 
 	uint64_t hashCounter = 0;
 
@@ -2731,8 +2706,10 @@ void BitcoinMiner()
 		// Prebuild hash buffer
 		//
 
-		static const uint32_t hashInitState[8] = { 0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939, 0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4 };
-
+		static const uint32_t hashInitState[] = {
+		    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+		    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+		};
 		//printf("preparing jobs\n");
 		const int nJobs = 4;
 		struct HashJob job[nJobs];
@@ -2744,55 +2721,44 @@ void BitcoinMiner()
 			job[i].block.nBits          = pblock->nBits          = nBits;
 			job[i].block.nNonce         = pblock->nNonce         = i + 1;
 
-			memcpy(&job[i].hashCache, hashInitState, sizeof(hashInitState));
+			memcpy(&job[i].blockHash, hashInitState, sizeof(hashInitState));
+			memcpy(&job[i].blockHashCache, hashInitState, sizeof(hashInitState));
+
+			//printf("pblock %d hash: %s\n", i, pblock->GetHash().GetHex().c_str());
 		}
-
+		
+		/* .. to compute the real block hash. */
+		/*__sha256_hash_t *blockHash[4] = {
+			(__sha256_hash_t *) &job[0].blockHash, (__sha256_hash_t *) &job[1].blockHash,
+			(__sha256_hash_t *) &job[2].blockHash, (__sha256_hash_t *) &job[3].blockHash
+		};*/
+		/* The block hash then serves as the input into another round of hashing */
+		/*__sha256_block_t *blockHashBlock[4] = {
+			(__sha256_block_t *) &job[0].blockHash, (__sha256_block_t *) &job[1].blockHash,
+			(__sha256_block_t *) &job[2].blockHash, (__sha256_block_t *) &job[3].blockHash
+		};*/
+		/* And finally we get the desired hash */
+		/*__sha256_hash_t *blockHashHash[4] = {
+			(__sha256_hash_t *) &job[0].hashHash, (__sha256_hash_t *) &job[1].hashHash,
+			(__sha256_hash_t *) &job[2].hashHash, (__sha256_hash_t *) &job[3].hashHash
+		};*/
+		
+		//printf("\n\nLoop starts\n");
+		
 		unsigned int nBlocks0 = FormatHashBlocks(&job[0].block, sizeof(job[0].block));
-		unsigned int nBlocks1 = FormatHashBlocks(&job[0].hashHash, sizeof(job[0].hashHash));
-
-		/* Set up the block and hash pointers */
-		__sha256_block_t *blk[4] = {
+		assert(nBlocks0 == 2);
+		
+		/* Hash the first block and cache the result. */
+		__sha256_block_t *block[4] = {
 			(__sha256_block_t *) &job[0].block, (__sha256_block_t *) &job[1].block,
 			(__sha256_block_t *) &job[2].block, (__sha256_block_t *) &job[3].block
 		};
-		__sha256_block_t *blkHash[4] = {
-			(__sha256_block_t *) &job[0].blockHash, (__sha256_block_t *) &job[1].blockHash,
-			(__sha256_block_t *) &job[2].blockHash, (__sha256_block_t *) &job[3].blockHash
+		__sha256_hash_t *blockHashCache[4] = {
+			(__sha256_hash_t *) &job[0].blockHashCache, (__sha256_hash_t *) &job[1].blockHashCache,
+			(__sha256_hash_t *) &job[2].blockHashCache, (__sha256_hash_t *) &job[3].blockHashCache
 		};
-
-		__sha256_hash_t *hashCache[4] = {
-			(__sha256_hash_t *) job[0].hashCache.begin(), (__sha256_hash_t *) job[1].hashCache.begin(),
-			(__sha256_hash_t *) job[2].hashCache.begin(), (__sha256_hash_t *) job[3].hashCache.begin()
-		};
-		__sha256_hash_t *blockHash[4] = {
-			(__sha256_hash_t *) &job[0].blockHash, (__sha256_hash_t *) &job[1].blockHash,
-			(__sha256_hash_t *) &job[2].blockHash, (__sha256_hash_t *) &job[3].blockHash
-		};
-		__sha256_hash_t *hashHash[4] = {
-			(__sha256_hash_t *) &job[0].hashHash, (__sha256_hash_t *) &job[1].hashHash,
-			(__sha256_hash_t *) &job[2].hashHash, (__sha256_hash_t *) &job[3].hashHash
-		};
-
-		/* Byteswap the blocks */
-		for (int i = 0; i < nJobs; ++i) {
-			__sha256_block_t *p = blk[i];
-			for (int j = 0; j < nBlocks0 * 32; j++) {
-				*p[j] = ByteReverse(*p[j]);
-			}
-		}
-		printf("prehashing\n");
-		/* Hash the first two blocks, those always remain the same */
-		printf("my hash: %s\n", job[0].hashCache.GetHex().c_str());
-		sha256(blk, hashCache, 2);
+		sha256(block, blockHashCache, 1);
 		
-		uint256 hash;
-		BlockSHA256(&job[0].block, 2, &hash);
-		if (1 || job[0].hashCache != hash) {
-			printf("my hash: %s\n", job[0].hashCache.GetHex().c_str());
-			printf("bl hash: %s\n", hash.GetHex().c_str());
-		} else printf("success");
-		return;
-
 		//
 		// Search
 		//
@@ -2800,64 +2766,114 @@ void BitcoinMiner()
 		uint256 hashTarget = CBigNum().SetCompact(pblock->nBits).getuint256();
 		for(;;)
 		{
+			pblock->nNonce = job[0].block.nNonce;
+			pblock->GetHash();
+			
 			for (int i = 0; i < nJobs; ++i) {
-			/* Copy the cached hash state */
-				job[i].blockHash = job[i].hashCache;
+				/* Copy the cached hash state */
+				job[i].blockHash = job[i].blockHashCache;
 
-			/* Initialize the hash hash state */ 
+				/* Initialize the hash hash state */ 
 				memcpy(&job[i].hashHash, hashInitState, sizeof(hashInitState));
+				//memcpy(&job[i].blockHash, hashInitState, sizeof(hashInitState));
 			}
-			uint256 hash;
-			BlockSHA256(&job[0].block, 2, &hash);
-			if (job[0].hashCache != hash) {
-				printf("my hash: %s\n", job[0].hashCache.GetHex().c_str());
-				printf("bl hash: %s\n", hash.GetHex().c_str());
-			} else printf("success");
-			return;
-
-			//printf("hashing last block\n");
-			/* Run the hash on the last block */
-			sha256(blk, blockHash, 1);
 			
+			//printf("block hash start: %s\n", job[0].blockHash.GetHex().c_str());
+			/* Set up the hash pointers */
+			__sha256_hash_t *blockHash[4] = {
+				(__sha256_hash_t *) &job[0].blockHash, (__sha256_hash_t *) &job[1].blockHash,
+				(__sha256_hash_t *) &job[2].blockHash, (__sha256_hash_t *) &job[3].blockHash
+			};
 			
-
+			/* Hash on the second block */
+			sha256(block, blockHash, 1);
+			
+			/* Rewind the block pointers so that we can reuse them in the next
+			 * iteration. */
+			for (int i = 0; i < 4; ++i) {
+				--block[i];
+			}
+			
+			/*for (int i = 0; i < nJobs; ++i) {
+				uint8_t *begin = (uint8_t *) &job[i].block, *end = (uint8_t *) (&job[i].block + 1);
+				for (int j = 0; j < min(80, (int)(end - begin)); ++j) {
+					printf("%02x", begin[j]);
+				} printf("\n");
+				printf("found %d hash: %s\n", i, job[i].blockHash.GetHex().c_str());
+			}*/
+			
+			/* Now we have the hash of the whole bitcoin block */
 			for (int i = 0; i < nJobs; ++i) {
-			/* Rewind the block pointers */
-				blk[i] -= 1;
-
-			/* swap the hash */
-				__sha256_block_t *p = blkHash[i];
-				for (int j = 0; j < nBlocks1 * 32; j++) {
-					*p[j] = ByteReverse(*p[j]);
+				/* swap the hash */
+				uint32_t *h = (uint32_t *) &job[i].blockHash;
+				for (int j = 0; j < 8; ++j) {
+					h[j] = ByteReverse(h[j]);
 				}
+				
+				//printf("hash 1: %s\n", job[i].blockHash.GetHex().c_str());
+				
+				/* Format the blockHash so it can be hashed again */
+				unsigned int nBlocks1 = FormatHashBlocks(&job[i].blockHash, sizeof(job[i].blockHash));
+				assert(nBlocks1 == 1);
 			}
 
-			//printf("hashing hash\n");
+			__sha256_block_t *blockHashBlock[4] = {
+				(__sha256_block_t *) &job[0].blockHash, (__sha256_block_t *) &job[1].blockHash,
+				(__sha256_block_t *) &job[2].blockHash, (__sha256_block_t *) &job[3].blockHash
+			};
+			/* And finally we get the desired hash */
+			__sha256_hash_t *blockHashHash[4] = {
+				(__sha256_hash_t *) &job[0].hashHash, (__sha256_hash_t *) &job[1].hashHash,
+				(__sha256_hash_t *) &job[2].hashHash, (__sha256_hash_t *) &job[3].hashHash
+			};
+			
 			/* Hash the hash again */
-			sha256(blkHash, hashHash, 1);
+			sha256(blockHashBlock, blockHashHash, 1);
 			hashCounter++;
 
-			/* Rewind the blkHash pointers */
+			/* Now we have the hashes we want. Check if one is good. */
 			for (int i = 0; i < nJobs; ++i) {
-			/* Rewind the block pointers */
-				blkHash[i] -= 1;
-			}
-
-			for (int i = 0; i < nJobs; ++i) {
-				if (job[i].hashHash != pblock->GetHash()) {
-					
+				/* swap the hash */
+				uint32_t *h = (uint32_t *) &job[i].hashHash;
+				for (int j = 0; j < 8; ++j) {
+					h[j] = ByteReverse(h[j]);
 				}
+				
+				/* Compare with the original algorithm */
+				/*uint256 hash2;
+				struct unnamed {
+					uint256 hash1;
+					unsigned char padding[64];
+				} tmp;
+				BlockSHA256(&job[i].block, 2, &tmp.hash1);
+				unsigned int nBlocks1 = FormatHashBlocks(&tmp.hash1, sizeof(tmp.hash1));
+				assert(nBlocks1 == 1);
+				BlockSHA256(&tmp.hash1, 1, &hash2);
 
+				printf("1 my hash: %s\n", job[i].blockHash.GetHex().c_str());
+				printf("1 bl hash: %s\n", tmp.hash1.GetHex().c_str());
+				
+				printf("2 my hash: %s\n", job[i].hashHash.GetHex().c_str());
+				printf("2 bl hash: %s\n", hash2.GetHex().c_str());
+				*/
+				
+				//pblock->nNonce = job[i].block.nNonce;
+				//printf("my hash 1: %s\n", job[i].blockHash.GetHex().c_str());
+				/*if (job[i].hashHash != pblock->GetHash()) {
+					printf("my hash: %s\n", job[i].hashHash.GetHex().c_str());
+					printf("bl hash: %s\n", pblock->GetHash().GetHex().c_str());
+				}*/
+				
 				if (job[i].hashHash <= hashTarget)
 				{
-					pblock->nNonce = ByteReverse(job[i].block.nNonce);
+					pblock->nNonce = job[i].block.nNonce;
 					if (job[i].hashHash != pblock->GetHash()) {
 						printf("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nHash rejected\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 					}
 
 					//// debug print
 					printf("BitcoinMiner:\n");
-					printf("proof-of-work found  \n  hash: %s  \ntarget: %s\n", hash.GetHex().c_str(), hashTarget.GetHex().c_str());
+					printf("proof-of-work found  \n  hash: %s  \ntarget: %s\n", job[i].hashHash.GetHex().c_str(), hashTarget.GetHex().c_str());
 					pblock->print();
 					printf("%s ", DateTimeStrFormat("%x %H:%M", GetTime()).c_str());
 					printf("generated %s\n", FormatMoney(pblock->vtx[0].vout[0].nValue).c_str());
@@ -2887,8 +2903,8 @@ void BitcoinMiner()
 					break;
 				}
 
-				uint32_t oldNonce = ByteReverse(job[i].block.nNonce);
-				job[i].block.nNonce = ByteReverse(oldNonce + nJobs);
+				uint32_t oldNonce = job[i].block.nNonce;
+				job[i].block.nNonce = oldNonce + nJobs;
 
 
 			// Update nTime every few seconds
@@ -2906,7 +2922,7 @@ void BitcoinMiner()
 						} else {
 							int64 now = GetTimeMillis();
 							if (now - lastReport > 5*1000) {
-								double dHashesPerSec = 1000.0 * 4 * counterMask * allHashCounter / (now - nTimerStart);
+								double dHashesPerSec = 1000.0 * nJobs * counterMask * allHashCounter / (now - nTimerStart);
 								printf("hashmeter %3d CPUs %6.0f khash/s\n", vnThreadsRunning[3], dHashesPerSec/1000.0);
 								lastReport = now;
 							}
@@ -2953,7 +2969,7 @@ void BitcoinMiner()
 				}
 
 				uint32_t nTime = pblock->nTime = max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
-				job[i].block.nTime = ByteReverse(nTime);
+				job[i].block.nTime = nTime;
 			}
 		}
 	}

@@ -169,7 +169,7 @@ static inline __m128i SHA256_CONST(int i) {
     h = _mm_add_epi32(T1, T2);
 
 static inline uint32_t SWAP32(const void *addr) {
-    return htonl(*((uint32_t *)(addr)));
+	return htonl(*((uint32_t *)(addr)));
 }
 
 static inline __m128i LOAD(const __sha256_block_t *blk[4], int i) {
@@ -181,9 +181,12 @@ static inline void dumpreg(__m128i x, char *msg) {
     printf("%s %08x %08x %08x %08x\n", msg, box.ret[0], box.ret[1], box.ret[2], box.ret[3]);
 }
 
+#if 0
 #define dumpstate() printf("%s: %08x %08x %08x %08x %08x %08x %08x %08x %08x\n", \
 __func__, store32(w0), store32(a), store32(b), store32(c), store32(d), store32(e), store32(f), store32(g), store32(h));
-
+#else
+#define dumpstate()
+#endif
 
 void __sha256_int(const __sha256_block_t *blk[4], __sha256_hash_t *hash[4])
 {
@@ -203,12 +206,12 @@ void __sha256_int(const __sha256_block_t *blk[4], __sha256_hash_t *hash[4])
     __m128i w0, w1, w2, w3, w4, w5, w6, w7;
     __m128i w8, w9, w10, w11, w12, w13, w14, w15;
     __m128i T1, T2;
+
     
     /* LINTED E_BAD_PTR_CAST_ALIGN */
     w0 =  LOAD(blk, 0);
-    dumpstate();
+	dumpstate();
     SHA256ROUND(a, b, c, d, e, f, g, h, 0, w0);
-    dumpstate();
     
     /* LINTED E_BAD_PTR_CAST_ALIGN */
     w1 =  LOAD(blk, 1);
@@ -257,6 +260,7 @@ void __sha256_int(const __sha256_block_t *blk[4], __sha256_hash_t *hash[4])
     SHA256ROUND(b, c, d, e, f, g, h, a, 15, w15);
     
     w0 = add4(SIGMA1_256(w14), w9, SIGMA0_256(w1), w0);
+	dumpstate();
     SHA256ROUND(a, b, c, d, e, f, g, h, 16, w0);
     w1 = add4(SIGMA1_256(w15), w10, SIGMA0_256(w2), w1);
     SHA256ROUND(h, a, b, c, d, e, f, g, 17, w1);
@@ -290,6 +294,7 @@ void __sha256_int(const __sha256_block_t *blk[4], __sha256_hash_t *hash[4])
     SHA256ROUND(b, c, d, e, f, g, h, a, 31, w15);
     
     w0 = add4(SIGMA1_256(w14), w9, SIGMA0_256(w1), w0);
+    dumpstate();
     SHA256ROUND(a, b, c, d, e, f, g, h, 32, w0);
     w1 = add4(SIGMA1_256(w15), w10, SIGMA0_256(w2), w1);
     SHA256ROUND(h, a, b, c, d, e, f, g, 33, w1);
@@ -323,6 +328,7 @@ void __sha256_int(const __sha256_block_t *blk[4], __sha256_hash_t *hash[4])
     SHA256ROUND(b, c, d, e, f, g, h, a, 47, w15);
     
     w0 = add4(SIGMA1_256(w14), w9, SIGMA0_256(w1), w0);
+    dumpstate();
     SHA256ROUND(a, b, c, d, e, f, g, h, 48, w0);
     w1 = add4(SIGMA1_256(w15), w10, SIGMA0_256(w2), w1);
     SHA256ROUND(h, a, b, c, d, e, f, g, 49, w1);
@@ -357,15 +363,17 @@ void __sha256_int(const __sha256_block_t *blk[4], __sha256_hash_t *hash[4])
     
     //dumpreg(d, "last d");
 
+	dumpstate();
+
 
 #define store(x,i)  \
     w0 = load_epi32((*h0)[i], (*h1)[i], (*h2)[i], (*h3)[i]); \
     w1 = _mm_add_epi32(w0, x); \
     store_epi32(w1, &(*h0)[i], &(*h1)[i], &(*h2)[i], &(*h3)[i]);
 
-    printf("%s a: %08x %08x\n", __func__, store32(a), *h0[0]);
+    //printf("%s a: %08x %08x\n", __func__, store32(a), *h0[0]);
     store(a, 0);
-    printf("%s a: %08x\n", __func__, *h0[0]);
+    //printf("%s a: %08x\n", __func__, *h0[0]);
     store(b, 1);
     store(c, 2);
     store(d, 3);
