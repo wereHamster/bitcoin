@@ -2616,17 +2616,21 @@ void BitcoinMiner()
 		(__sha256_block_t *) &buffer, (__sha256_block_t *) &buffer
 	};
 	
-	static uint32_t theHash[4][8];
-	__sha256_hash_t *ptr = (__sha256_hash_t *) theHash;
-	__sha256_hash_t *hashCache[4] = {
-		&ptr[0], &ptr[1], &ptr[2], &ptr[3]
+	static const uint32_t hashInitState[8] = {
+		0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+	    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
 	};
+	static __sha256_hash_t th[4];
+	for (int i = 0; i < 4; ++i) {
+		__builtin_memcpy(th[i], hashInitState, 32);
+	}
+	__sha256_hash_t *hashCache[4] = { &th[0], &th[1], &th[2], &th[3] };
 	
-	sha256(blkHash, hashCache, 2);
+	sha256(blkHash, hashCache, 1);
 	
 	uint256 hash;
-	BlockSHA256(&buffer, 2, &hash);
-	printf("my hash: %s\n", GetHex((unsigned char*)theHash[0]).c_str());
+	BlockSHA256(&buffer, 1, &hash);
+	printf("my hash: %s\n", GetHex((unsigned char*)th[0]).c_str());
 	printf("bl hash: %s\n", hash.GetHex().c_str());
 	
 	exit(0);

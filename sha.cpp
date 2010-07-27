@@ -138,6 +138,10 @@ static const word32 SHA256_K[64] = {
 #define s0(x) (rotrFixed(x,7)^rotrFixed(x,18)^(x>>3))
 #define s1(x) (rotrFixed(x,17)^rotrFixed(x,19)^(x>>10))
 
+#include <stdio.h>
+#define dumpstate() printf("%s: %08x %08x %08x %08x %08x %08x %08x %08x %08x\n", \
+__func__, blk0(0), a(0), b(0), c(0), d(0), e(0), f(0), g(0), h(0));
+
 void SHA256::Transform(word32 *state, const word32 *data)
 {
     word32 W[16];
@@ -147,7 +151,7 @@ void SHA256::Transform(word32 *state, const word32 *data)
     /* 64 operations, partially loop unrolled */
     for (unsigned int j=0; j<64; j+=16)
     {
-        R( 0); R( 1); R( 2); R( 3);
+		dumpstate(); R( 0); dumpstate(); R( 1); R( 2); R( 3);
         R( 4); R( 5); R( 6); R( 7);
         R( 8); R( 9); R(10); R(11);
         R(12); R(13); R(14); R(15);
