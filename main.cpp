@@ -2486,7 +2486,7 @@ void GenerateBitcoins(bool fGenerate)
     }
     if (fGenerateBitcoins)
     {
-        int nProcessors = 4;
+        int nProcessors = 1;
         printf("%d processors\n", nProcessors);
         if (nProcessors < 1)
             nProcessors = 1;
@@ -2566,251 +2566,393 @@ void BlockSHA256(const void* pin, unsigned int nBlocks, void* pout)
 }
 
 
+struct HashJob
+{
+    struct Block
+    {
+        int nVersion;
+        uint256 hashPrevBlock;
+        uint256 hashMerkleRoot;
+        unsigned int nTime;
+        unsigned int nBits;
+        unsigned int nNonce;
+        unsigned char padding[64];
+    } block;
+
+    uint256 hashCache; /* Hash of the first two blocks */
+    uint256 blockHash;
+    uint256 hashHash;
+};
+
+#include "sha2-int.h"
+extern "C" void __sha256_int(__sha256_block_t *blk[4], __sha256_hash_t *hash[4]);
+
+static void sha256(__sha256_block_t *blk[4], __sha256_hash_t *hash[4], int nBlocks)
+{
+  for (int i = 0; i < nBlocks; ++i) {
+    __sha256_int(blk, hash);
+    for (int j = 0; j < 4; ++j) {
+      blk[j] += 1;
+    }
+  }
+}
+
+std::string GetHex(unsigned char *pn)
+{
+    char psz[32*2 + 1];
+    for (int i = 0; i < 32; i++)
+        sprintf(psz + i*2, "%02x", ((unsigned char*)pn)[32 - i - 1]);
+    return string(psz, psz + 32*2);
+}
+
 void BitcoinMiner()
 {
-    printf("BitcoinMiner started\n");
-    SetThreadPriority(THREAD_PRIORITY_LOWEST);
+	printf("BitcoinMiner started\n");
+	SetThreadPriority(THREAD_PRIORITY_LOWEST);
+	
+	static unsigned char buffer[64];
+	__sha256_block_t *blkHash[4] = {
+		(__sha256_block_t *) &buffer, (__sha256_block_t *) &buffer,
+		(__sha256_block_t *) &buffer, (__sha256_block_t *) &buffer
+	};
+	
+	static uint32_t theHash[4][8];
+	__sha256_hash_t *ptr = (__sha256_hash_t *) theHash;
+	__sha256_hash_t *hashCache[4] = {
+		&ptr[0], &ptr[1], &ptr[2], &ptr[3]
+	};
+	
+	sha256(blkHash, hashCache, 2);
+	
+	uint256 hash;
+	BlockSHA256(&buffer, 2, &hash);
+	printf("my hash: %s\n", GetHex((unsigned char*)theHash[0]).c_str());
+	printf("bl hash: %s\n", hash.GetHex().c_str());
+	
+	exit(0);
+	
+	
 
-    CKey key;
-    key.MakeNewKey();
-    CBigNum bnExtraNonce = 0;
-    while (fGenerateBitcoins)
-    {
-        Sleep(50);
-        if (fShutdown)
-            return;
-        while (vNodes.empty())
-        {
-            Sleep(1000);
-            if (fShutdown)
-                return;
-            if (!fGenerateBitcoins)
-                return;
-        }
+	uint64_t hashCounter = 0;
 
-        unsigned int nTransactionsUpdatedLast = nTransactionsUpdated;
-        CBlockIndex* pindexPrev = pindexBest;
-        unsigned int nBits = GetNextWorkRequired(pindexPrev);
+	CKey key;
+	key.MakeNewKey();
+	CBigNum bnExtraNonce = 0;
+	while (fGenerateBitcoins)
+	{
+		Sleep(50);
+		if (fShutdown)
+			return;
+		while (vNodes.empty())
+		{
+			Sleep(1000);
+			if (fShutdown)
+				return;
+			if (!fGenerateBitcoins)
+				return;
+		}
 
-
-        //
-        // Create coinbase tx
-        //
-        CTransaction txNew;
-        txNew.vin.resize(1);
-        txNew.vin[0].prevout.SetNull();
-        txNew.vin[0].scriptSig << nBits << ++bnExtraNonce;
-        txNew.vout.resize(1);
-        txNew.vout[0].scriptPubKey << key.GetPubKey() << OP_CHECKSIG;
-
-
-        //
-        // Create new block
-        //
-        auto_ptr<CBlock> pblock(new CBlock());
-        if (!pblock.get())
-            return;
-
-        // Add our coinbase tx as first transaction
-        pblock->vtx.push_back(txNew);
-
-        // Collect the latest transactions into the block
-        int64 nFees = 0;
-        CRITICAL_BLOCK(cs_main)
-        CRITICAL_BLOCK(cs_mapTransactions)
-        {
-            CTxDB txdb("r");
-            map<uint256, CTxIndex> mapTestPool;
-            vector<char> vfAlreadyAdded(mapTransactions.size());
-            bool fFoundSomething = true;
-            unsigned int nBlockSize = 0;
-            while (fFoundSomething && nBlockSize < MAX_SIZE/2)
-            {
-                fFoundSomething = false;
-                unsigned int n = 0;
-                for (map<uint256, CTransaction>::iterator mi = mapTransactions.begin(); mi != mapTransactions.end(); ++mi, ++n)
-                {
-                    if (vfAlreadyAdded[n])
-                        continue;
-                    CTransaction& tx = (*mi).second;
-                    if (tx.IsCoinBase() || !tx.IsFinal())
-                        continue;
-                    unsigned int nTxSize = ::GetSerializeSize(tx, SER_NETWORK);
-                    if (nBlockSize + nTxSize >= MAX_BLOCK_SIZE - 10000)
-                        continue;
-
-                    // Transaction fee based on block size
-                    int64 nMinFee = tx.GetMinFee(nBlockSize);
-
-                    map<uint256, CTxIndex> mapTestPoolTmp(mapTestPool);
-                    if (!tx.ConnectInputs(txdb, mapTestPoolTmp, CDiskTxPos(1,1,1), 0, nFees, false, true, nMinFee))
-                        continue;
-                    swap(mapTestPool, mapTestPoolTmp);
-
-                    pblock->vtx.push_back(tx);
-                    nBlockSize += nTxSize;
-                    vfAlreadyAdded[n] = true;
-                    fFoundSomething = true;
-                }
-            }
-        }
-        pblock->nBits = nBits;
-        pblock->vtx[0].vout[0].nValue = pblock->GetBlockValue(nFees);
-        printf("Running BitcoinMiner with %d transactions in block\n", pblock->vtx.size());
+		unsigned int nTransactionsUpdatedLast = nTransactionsUpdated;
+		CBlockIndex* pindexPrev = pindexBest;
+		unsigned int nBits = GetNextWorkRequired(pindexPrev);
 
 
-        //
-        // Prebuild hash buffer
-        //
-        struct unnamed1
-        {
-            struct unnamed2
-            {
-                int nVersion;
-                uint256 hashPrevBlock;
-                uint256 hashMerkleRoot;
-                unsigned int nTime;
-                unsigned int nBits;
-                unsigned int nNonce;
-            }
-            block;
-            unsigned char pchPadding0[64];
-            uint256 hash1;
-            unsigned char pchPadding1[64];
-        }
-        tmp;
-
-        tmp.block.nVersion       = pblock->nVersion;
-        tmp.block.hashPrevBlock  = pblock->hashPrevBlock  = (pindexPrev ? pindexPrev->GetBlockHash() : 0);
-        tmp.block.hashMerkleRoot = pblock->hashMerkleRoot = pblock->BuildMerkleTree();
-        tmp.block.nTime          = pblock->nTime          = max((pindexPrev ? pindexPrev->GetMedianTimePast()+1 : 0), GetAdjustedTime());
-        tmp.block.nBits          = pblock->nBits          = nBits;
-        tmp.block.nNonce         = pblock->nNonce         = 1;
-
-        unsigned int nBlocks0 = FormatHashBlocks(&tmp.block, sizeof(tmp.block));
-        unsigned int nBlocks1 = FormatHashBlocks(&tmp.hash1, sizeof(tmp.hash1));
+		//
+		// Create coinbase tx
+		//
+		CTransaction txNew;
+		txNew.vin.resize(1);
+		txNew.vin[0].prevout.SetNull();
+		txNew.vin[0].scriptSig << nBits << ++bnExtraNonce;
+		txNew.vout.resize(1);
+		txNew.vout[0].scriptPubKey << key.GetPubKey() << OP_CHECKSIG;
 
 
-        //
-        // Search
-        //
-        int64 nStart = GetTime();
-        uint256 hashTarget = CBigNum().SetCompact(pblock->nBits).getuint256();
-        uint256 hash;
-        loop
-        {
-            BlockSHA256(&tmp.block, nBlocks0, &tmp.hash1);
-            BlockSHA256(&tmp.hash1, nBlocks1, &hash);
+		//
+		// Create new block
+		//
+		auto_ptr<CBlock> pblock(new CBlock());
+		if (!pblock.get())
+			return;
 
-            if (hash <= hashTarget)
-            {
-                pblock->nNonce = tmp.block.nNonce;
-                assert(hash == pblock->GetHash());
+		// Add our coinbase tx as first transaction
+		pblock->vtx.push_back(txNew);
 
-                    //// debug print
-                    printf("BitcoinMiner:\n");
-                    printf("proof-of-work found  \n  hash: %s  \ntarget: %s\n", hash.GetHex().c_str(), hashTarget.GetHex().c_str());
-                    pblock->print();
-                    printf("%s ", DateTimeStrFormat("%x %H:%M", GetTime()).c_str());
-                    printf("generated %s\n", FormatMoney(pblock->vtx[0].vout[0].nValue).c_str());
+		// Collect the latest transactions into the block
+		int64 nFees = 0;
+		CRITICAL_BLOCK(cs_main)
+			CRITICAL_BLOCK(cs_mapTransactions)
+		{
+			CTxDB txdb("r");
+			map<uint256, CTxIndex> mapTestPool;
+			vector<char> vfAlreadyAdded(mapTransactions.size());
+			bool fFoundSomething = true;
+			unsigned int nBlockSize = 0;
+			while (fFoundSomething && nBlockSize < MAX_SIZE/2)
+			{
+				fFoundSomething = false;
+				unsigned int n = 0;
+				for (map<uint256, CTransaction>::iterator mi = mapTransactions.begin(); mi != mapTransactions.end(); ++mi, ++n)
+				{
+					if (vfAlreadyAdded[n])
+						continue;
+					CTransaction& tx = (*mi).second;
+					if (tx.IsCoinBase() || !tx.IsFinal())
+						continue;
+					unsigned int nTxSize = ::GetSerializeSize(tx, SER_NETWORK);
+					if (nBlockSize + nTxSize >= MAX_BLOCK_SIZE - 10000)
+						continue;
 
-                SetThreadPriority(THREAD_PRIORITY_NORMAL);
-                CRITICAL_BLOCK(cs_main)
-                {
-                    if (pindexPrev == pindexBest)
-                    {
-                        // Save key
-                        if (!AddKey(key))
-                            return;
-                        key.MakeNewKey();
+					// Transaction fee based on block size
+					int64 nMinFee = tx.GetMinFee(nBlockSize);
 
-                        // Track how many getdata requests this block gets
-                        CRITICAL_BLOCK(cs_mapRequestCount)
-                            mapRequestCount[pblock->GetHash()] = 0;
+					map<uint256, CTxIndex> mapTestPoolTmp(mapTestPool);
+					if (!tx.ConnectInputs(txdb, mapTestPoolTmp, CDiskTxPos(1,1,1), 0, nFees, false, true, nMinFee))
+						continue;
+					swap(mapTestPool, mapTestPoolTmp);
 
-                        // Process this block the same as if we had received it from another node
-                        if (!ProcessBlock(NULL, pblock.release()))
-                            printf("ERROR in BitcoinMiner, ProcessBlock, block not accepted\n");
-                    }
-                }
-                SetThreadPriority(THREAD_PRIORITY_LOWEST);
+					pblock->vtx.push_back(tx);
+					nBlockSize += nTxSize;
+					vfAlreadyAdded[n] = true;
+					fFoundSomething = true;
+				}
+			}
+		}
+		pblock->nBits = nBits;
+		pblock->vtx[0].vout[0].nValue = pblock->GetBlockValue(nFees);
+		printf("Running BitcoinMiner with %d transactions in block\n", pblock->vtx.size());
 
-                Sleep(500);
-                break;
-            }
 
-            // Update nTime every few seconds
-            const unsigned int nMask = 0xffff;
-            if ((++tmp.block.nNonce & nMask) == 0)
-            {
-                // Meter hashes/sec
-                static int64 nTimerStart;
-                static int nHashCounter;
-                if (nTimerStart == 0)
-                    nTimerStart = GetTimeMillis();
-                else
-                    nHashCounter++;
-                if (GetTimeMillis() - nTimerStart > 4000)
-                {
-                    static CCriticalSection cs;
-                    CRITICAL_BLOCK(cs)
-                    {
-                        if (GetTimeMillis() - nTimerStart > 4000)
-                        {
-                            double dHashesPerSec = 1000.0 * (nMask+1) * nHashCounter / (GetTimeMillis() - nTimerStart);
-                            nTimerStart = GetTimeMillis();
-                            nHashCounter = 0;
-                            string strStatus = strprintf("    %.0f khash/s", dHashesPerSec/1000.0);
-                            UIThreadCall(bind(CalledSetStatusBar, strStatus, 0));
-                            static int64 nLogTime;
-                            if (GetTime() - nLogTime > 30 * 60)
-                            {
-                                nLogTime = GetTime();
-                                printf("%s ", DateTimeStrFormat("%x %H:%M", GetTime()).c_str());
-                                printf("hashmeter %3d CPUs %6.0f khash/s\n", vnThreadsRunning[3], dHashesPerSec/1000.0);
-                            }
-                        }
-                    }
-                }
+		//
+		// Prebuild hash buffer
+		//
 
-                // Check for stop or if block needs to be rebuilt
-                if (fShutdown)
-                    return;
-                if (!fGenerateBitcoins)
-                    return;
-                if (fLimitProcessors && vnThreadsRunning[3] > nLimitProcessors)
-                    return;
-                if (vNodes.empty())
-                    break;
-                if (tmp.block.nNonce == 0)
-                    break;
-                if (nTransactionsUpdated != nTransactionsUpdatedLast && GetTime() - nStart > 60)
-                    break;
-                if (pindexPrev != pindexBest)
-                {
-                    // Pause generating during initial download
-                    if (GetTime() - nStart < 20)
-                    {
-                        CBlockIndex* pindexTmp;
-                        do
-                        {
-                            pindexTmp = pindexBest;
-                            for (int i = 0; i < 10; i++)
-                            {
-                                Sleep(1000);
-                                if (fShutdown)
-                                    return;
-                            }
-                        }
-                        while (pindexTmp != pindexBest);
-                    }
-                    break;
-                }
+		static const uint32_t hashInitState[8] = { 0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939, 0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4 };
 
-                tmp.block.nTime = pblock->nTime = max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
-            }
-        }
-    }
+		//printf("preparing jobs\n");
+		const int nJobs = 4;
+		struct HashJob job[nJobs];
+		for (int i = 0; i < nJobs; ++i) {
+			job[i].block.nVersion       = pblock->nVersion;
+			job[i].block.hashPrevBlock  = pblock->hashPrevBlock  = (pindexPrev ? pindexPrev->GetBlockHash() : 0);
+			job[i].block.hashMerkleRoot = pblock->hashMerkleRoot = pblock->BuildMerkleTree();
+			job[i].block.nTime          = pblock->nTime          = max((pindexPrev ? pindexPrev->GetMedianTimePast()+1 : 0), GetAdjustedTime());
+			job[i].block.nBits          = pblock->nBits          = nBits;
+			job[i].block.nNonce         = pblock->nNonce         = i + 1;
+
+			memcpy(&job[i].hashCache, hashInitState, sizeof(hashInitState));
+		}
+
+		unsigned int nBlocks0 = FormatHashBlocks(&job[0].block, sizeof(job[0].block));
+		unsigned int nBlocks1 = FormatHashBlocks(&job[0].hashHash, sizeof(job[0].hashHash));
+
+		/* Set up the block and hash pointers */
+		__sha256_block_t *blk[4] = {
+			(__sha256_block_t *) &job[0].block, (__sha256_block_t *) &job[1].block,
+			(__sha256_block_t *) &job[2].block, (__sha256_block_t *) &job[3].block
+		};
+		__sha256_block_t *blkHash[4] = {
+			(__sha256_block_t *) &job[0].blockHash, (__sha256_block_t *) &job[1].blockHash,
+			(__sha256_block_t *) &job[2].blockHash, (__sha256_block_t *) &job[3].blockHash
+		};
+
+		__sha256_hash_t *hashCache[4] = {
+			(__sha256_hash_t *) job[0].hashCache.begin(), (__sha256_hash_t *) job[1].hashCache.begin(),
+			(__sha256_hash_t *) job[2].hashCache.begin(), (__sha256_hash_t *) job[3].hashCache.begin()
+		};
+		__sha256_hash_t *blockHash[4] = {
+			(__sha256_hash_t *) &job[0].blockHash, (__sha256_hash_t *) &job[1].blockHash,
+			(__sha256_hash_t *) &job[2].blockHash, (__sha256_hash_t *) &job[3].blockHash
+		};
+		__sha256_hash_t *hashHash[4] = {
+			(__sha256_hash_t *) &job[0].hashHash, (__sha256_hash_t *) &job[1].hashHash,
+			(__sha256_hash_t *) &job[2].hashHash, (__sha256_hash_t *) &job[3].hashHash
+		};
+
+		/* Byteswap the blocks */
+		for (int i = 0; i < nJobs; ++i) {
+			__sha256_block_t *p = blk[i];
+			for (int j = 0; j < nBlocks0 * 32; j++) {
+				*p[j] = ByteReverse(*p[j]);
+			}
+		}
+		printf("prehashing\n");
+		/* Hash the first two blocks, those always remain the same */
+		printf("my hash: %s\n", job[0].hashCache.GetHex().c_str());
+		sha256(blk, hashCache, 2);
+		
+		uint256 hash;
+		BlockSHA256(&job[0].block, 2, &hash);
+		if (1 || job[0].hashCache != hash) {
+			printf("my hash: %s\n", job[0].hashCache.GetHex().c_str());
+			printf("bl hash: %s\n", hash.GetHex().c_str());
+		} else printf("success");
+		return;
+
+		//
+		// Search
+		//
+		int64 nStart = GetTime();
+		uint256 hashTarget = CBigNum().SetCompact(pblock->nBits).getuint256();
+		for(;;)
+		{
+			for (int i = 0; i < nJobs; ++i) {
+			/* Copy the cached hash state */
+				job[i].blockHash = job[i].hashCache;
+
+			/* Initialize the hash hash state */ 
+				memcpy(&job[i].hashHash, hashInitState, sizeof(hashInitState));
+			}
+			uint256 hash;
+			BlockSHA256(&job[0].block, 2, &hash);
+			if (job[0].hashCache != hash) {
+				printf("my hash: %s\n", job[0].hashCache.GetHex().c_str());
+				printf("bl hash: %s\n", hash.GetHex().c_str());
+			} else printf("success");
+			return;
+
+			//printf("hashing last block\n");
+			/* Run the hash on the last block */
+			sha256(blk, blockHash, 1);
+			
+			
+
+			for (int i = 0; i < nJobs; ++i) {
+			/* Rewind the block pointers */
+				blk[i] -= 1;
+
+			/* swap the hash */
+				__sha256_block_t *p = blkHash[i];
+				for (int j = 0; j < nBlocks1 * 32; j++) {
+					*p[j] = ByteReverse(*p[j]);
+				}
+			}
+
+			//printf("hashing hash\n");
+			/* Hash the hash again */
+			sha256(blkHash, hashHash, 1);
+			hashCounter++;
+
+			/* Rewind the blkHash pointers */
+			for (int i = 0; i < nJobs; ++i) {
+			/* Rewind the block pointers */
+				blkHash[i] -= 1;
+			}
+
+			for (int i = 0; i < nJobs; ++i) {
+				if (job[i].hashHash != pblock->GetHash()) {
+					
+				}
+
+				if (job[i].hashHash <= hashTarget)
+				{
+					pblock->nNonce = ByteReverse(job[i].block.nNonce);
+					if (job[i].hashHash != pblock->GetHash()) {
+						printf("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\nHash rejected\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+					}
+
+					//// debug print
+					printf("BitcoinMiner:\n");
+					printf("proof-of-work found  \n  hash: %s  \ntarget: %s\n", hash.GetHex().c_str(), hashTarget.GetHex().c_str());
+					pblock->print();
+					printf("%s ", DateTimeStrFormat("%x %H:%M", GetTime()).c_str());
+					printf("generated %s\n", FormatMoney(pblock->vtx[0].vout[0].nValue).c_str());
+
+					SetThreadPriority(THREAD_PRIORITY_NORMAL);
+					CRITICAL_BLOCK(cs_main)
+					{
+						if (pindexPrev == pindexBest)
+						{
+						// Save key
+							if (!AddKey(key))
+								return;
+							key.MakeNewKey();
+
+						// Track how many getdata requests this block gets
+							CRITICAL_BLOCK(cs_mapRequestCount)
+								mapRequestCount[pblock->GetHash()] = 0;
+
+						// Process this block the same as if we had received it from another node
+							if (!ProcessBlock(NULL, pblock.release()))
+								printf("ERROR in BitcoinMiner, ProcessBlock, block not accepted\n");
+						}
+					}
+					SetThreadPriority(THREAD_PRIORITY_LOWEST);
+
+					Sleep(500);
+					break;
+				}
+
+				uint32_t oldNonce = ByteReverse(job[i].block.nNonce);
+				job[i].block.nNonce = ByteReverse(oldNonce + nJobs);
+
+
+			// Update nTime every few seconds
+				static const uint64_t counterMask = 0xfffff;
+				if (hashCounter % counterMask == 0)
+				{
+					static CCriticalSection cs;
+					CRITICAL_BLOCK(cs) {
+						static uint64_t allHashCounter;
+						++allHashCounter;
+						
+						static int64 nTimerStart, lastReport;
+						if (nTimerStart == 0) {
+							nTimerStart = lastReport = GetTimeMillis();
+						} else {
+							int64 now = GetTimeMillis();
+							if (now - lastReport > 5*1000) {
+								double dHashesPerSec = 1000.0 * 4 * counterMask * allHashCounter / (now - nTimerStart);
+								printf("hashmeter %3d CPUs %6.0f khash/s\n", vnThreadsRunning[3], dHashesPerSec/1000.0);
+								lastReport = now;
+							}
+							if (now - nTimerStart > 60*1000) {
+								allHashCounter = nTimerStart = lastReport = 0;
+								printf("resetting counters\n");
+							}
+						}
+					}					
+				}
+
+				// Check for stop or if block needs to be rebuilt
+				if (fShutdown)
+					return;
+				if (!fGenerateBitcoins)
+					return;
+				if (fLimitProcessors && vnThreadsRunning[3] > nLimitProcessors)
+					return;
+				if (vNodes.empty())
+					break;
+				if (oldNonce + 1 == 0)
+					break;
+				if (nTransactionsUpdated != nTransactionsUpdatedLast && GetTime() - nStart > 60)
+					break;
+				if (pindexPrev != pindexBest)
+				{
+					// Pause generating during initial download
+					if (GetTime() - nStart < 20)
+					{
+						CBlockIndex* pindexTmp;
+						do
+						{
+							pindexTmp = pindexBest;
+							for (int i = 0; i < 10; i++)
+							{
+								Sleep(1000);
+								if (fShutdown)
+									return;
+							}
+						}
+						while (pindexTmp != pindexBest);
+					}
+					break;
+				}
+
+				uint32_t nTime = pblock->nTime = max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
+				job[i].block.nTime = ByteReverse(nTime);
+			}
+		}
+	}
 }
 
 

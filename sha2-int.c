@@ -146,7 +146,7 @@ static inline __m128i load_epi32(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t
 static inline uint32_t store32(__m128i x) {
     union { uint32_t ret[0]; __m128i x; } box;
     box.x = x;
-    return box.ret[1];
+    return box.ret[0];
 }
 
 static inline void store_epi32(__m128i x, uint32_t *x0, uint32_t *x1, uint32_t *x2, uint32_t *x3) {
@@ -172,8 +172,8 @@ static inline uint32_t SWAP32(const void *addr) {
     return htonl(*((uint32_t *)(addr)));
 }
 
-static inline __m128i LOAD(const __sha256_block_t blk[4], int i) {
-    return load_epi32(SWAP32(blk[0] + i * 4), SWAP32(blk[1] + i * 4), SWAP32(blk[2] + i * 4), SWAP32(blk[3] + i * 4));
+static inline __m128i LOAD(const __sha256_block_t *blk[4], int i) {
+    return load_epi32(SWAP32(*blk[0] + i * 4), SWAP32(*blk[1] + i * 4), SWAP32(*blk[2] + i * 4), SWAP32(*blk[3] + i * 4));
 }
 
 static inline void dumpreg(__m128i x, char *msg) {
@@ -181,16 +181,24 @@ static inline void dumpreg(__m128i x, char *msg) {
     printf("%s %08x %08x %08x %08x\n", msg, box.ret[0], box.ret[1], box.ret[2], box.ret[3]);
 }
 
-void __sha256_int(const __sha256_block_t blk[4], __sha256_hash_t hash[4])
+#define dumpstate() printf("%s: %08x %08x %08x %08x %08x %08x %08x %08x %08x\n", \
+__func__, store32(w0), store32(a), store32(b), store32(c), store32(d), store32(e), store32(f), store32(g), store32(h));
+
+
+void __sha256_int(const __sha256_block_t *blk[4], __sha256_hash_t *hash[4])
 {
-    __m128i a = load_epi32(hash[0][0], hash[1][0], hash[2][0], hash[3][0]);
-    __m128i b = load_epi32(hash[0][1], hash[1][1], hash[2][1], hash[3][1]);
-    __m128i c = load_epi32(hash[0][2], hash[1][2], hash[2][2], hash[3][2]);
-    __m128i d = load_epi32(hash[0][3], hash[1][3], hash[2][3], hash[3][3]);
-    __m128i e = load_epi32(hash[0][4], hash[1][4], hash[2][4], hash[3][4]);
-    __m128i f = load_epi32(hash[0][5], hash[1][5], hash[2][5], hash[3][5]);
-    __m128i g = load_epi32(hash[0][6], hash[1][6], hash[2][6], hash[3][6]);
-    __m128i h = load_epi32(hash[0][7], hash[1][7], hash[2][7], hash[3][7]);
+    __sha256_hash_t *h0 = hash[0], *h1 = hash[1], *h2 = hash[2], *h3 = hash[3];
+#define load(x, i) __m128i x = load_epi32((*h0)[i], (*h1)[i], (*h2)[i], (*h3)[i])
+
+    load(a, 0);
+    load(b, 1);
+    load(c, 2);
+    load(d, 3);
+    load(e, 4);
+    load(f, 5);
+    load(g, 6);
+    load(h, 7);    
+    
     
     __m128i w0, w1, w2, w3, w4, w5, w6, w7;
     __m128i w8, w9, w10, w11, w12, w13, w14, w15;
@@ -198,7 +206,10 @@ void __sha256_int(const __sha256_block_t blk[4], __sha256_hash_t hash[4])
     
     /* LINTED E_BAD_PTR_CAST_ALIGN */
     w0 =  LOAD(blk, 0);
+    dumpstate();
     SHA256ROUND(a, b, c, d, e, f, g, h, 0, w0);
+    dumpstate();
+    
     /* LINTED E_BAD_PTR_CAST_ALIGN */
     w1 =  LOAD(blk, 1);
     SHA256ROUND(h, a, b, c, d, e, f, g, 1, w1);
@@ -348,12 +359,13 @@ void __sha256_int(const __sha256_block_t blk[4], __sha256_hash_t hash[4])
 
 
 #define store(x,i)  \
-    w0 = load_epi32(hash[0][i],  hash[1][i],  hash[2][i],  hash[3][i]); \
+    w0 = load_epi32((*h0)[i], (*h1)[i], (*h2)[i], (*h3)[i]); \
     w1 = _mm_add_epi32(w0, x); \
-    store_epi32(w1, &hash[0][i], &hash[1][i], &hash[2][i], &hash[3][i]);
+    store_epi32(w1, &(*h0)[i], &(*h1)[i], &(*h2)[i], &(*h3)[i]);
 
+    printf("%s a: %08x %08x\n", __func__, store32(a), *h0[0]);
     store(a, 0);
-    //printf("%s a: %08x, %08x\n", __func__, store32(w0), hash[3][0]);
+    printf("%s a: %08x\n", __func__, *h0[0]);
     store(b, 1);
     store(c, 2);
     store(d, 3);
@@ -361,6 +373,4 @@ void __sha256_int(const __sha256_block_t blk[4], __sha256_hash_t hash[4])
     store(f, 5);
     store(g, 6);
     store(h, 7);
-    
-    //printf("%s a: %08x, %08x\n", __func__, hash[0][0], hash[3][0]);
 }
