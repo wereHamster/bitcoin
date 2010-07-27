@@ -8,7 +8,6 @@
 #include "json/json_spirit_reader_template.h"
 #include "json/json_spirit_writer_template.h"
 #include "json/json_spirit_utils.h"
-#define printf OutputDebugStringF
 // MinGW 3.4.5 gets "fatal error: had to relocate PCH" if the json headers are
 // precompiled in headers.h.  The problem might be when the pch file goes over
 // a certain size around 145MB.  If we need access to json_spirit outside this

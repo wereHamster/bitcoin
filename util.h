@@ -24,7 +24,6 @@ typedef unsigned long long  uint64;
 #define UBEGIN(a)           ((unsigned char*)&(a))
 #define UEND(a)             ((unsigned char*)&((&(a))[1]))
 #define ARRAYLEN(array)     (sizeof(array)/sizeof((array)[0]))
-#define printf              OutputDebugStringF
 
 #ifdef snprintf
 #undef snprintf
@@ -86,7 +85,7 @@ typedef u_int SOCKET;
 #define _strlwr(psz)        to_lower(psz)
 #define _mkdir(psz)         filesystem::create_directory(psz)
 #define MAX_PATH            1024
-#define Sleep(n)            wxMilliSleep(n)
+#define Sleep(n)            usleep(n)
 #define Beep(n1,n2)         (0)
 #endif
 

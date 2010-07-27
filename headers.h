@@ -17,15 +17,7 @@
 #endif
 #define _WIN32_IE 0x0400
 #define WIN32_LEAN_AND_MEAN 1
-#define __STDC_LIMIT_MACROS // to enable UINT64_MAX from stdint.h
-#include <wx/wx.h>
-#include <wx/stdpaths.h>
-#include <wx/snglinst.h>
-#if wxUSE_GUI
-#include <wx/utils.h>
-#include <wx/clipbrd.h>
-#include <wx/taskbar.h>
-#endif
+
 #include <openssl/buffer.h>
 #include <openssl/ecdsa.h>
 #include <openssl/evp.h>
@@ -88,6 +80,8 @@
 #include <errno.h>
 #include <net/if.h>
 #include <ifaddrs.h>
+#include <sys/fcntl.h>
+#include <sys/stat.h>
 #endif
 #ifdef __BSD__
 #include <netinet/in.h>
@@ -114,8 +108,9 @@ using namespace boost;
 #if wxUSE_GUI
 #include "uibase.h"
 #endif
-#include "ui.h"
 #include "init.h"
+
+#define _(a) a
 
 #include "xpm/addressbook16.xpm"
 #include "xpm/addressbook20.xpm"

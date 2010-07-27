@@ -131,80 +131,6 @@ uint64 GetRand(uint64 nMax)
 
 
 
-inline int OutputDebugStringF(const char* pszFormat, ...)
-{
-    int ret = 0;
-    if (fPrintToConsole || wxTheApp == NULL)
-    {
-        // print to console
-        va_list arg_ptr;
-        va_start(arg_ptr, pszFormat);
-        ret = vprintf(pszFormat, arg_ptr);
-        va_end(arg_ptr);
-    }
-    else
-    {
-        // print to debug.log
-        char pszFile[MAX_PATH+100];
-        GetDataDir(pszFile);
-        strlcat(pszFile, "/debug.log", sizeof(pszFile));
-        FILE* fileout = fopen(pszFile, "a");
-        if (fileout)
-        {
-            //// Debug print useful for profiling
-            //fprintf(fileout, " %"PRI64d" ", GetTimeMillis());
-            va_list arg_ptr;
-            va_start(arg_ptr, pszFormat);
-            ret = vfprintf(fileout, pszFormat, arg_ptr);
-            va_end(arg_ptr);
-            fclose(fileout);
-        }
-    }
-
-#ifdef __WXMSW__
-    if (fPrintToDebugger)
-    {
-        // accumulate a line at a time
-        static CCriticalSection cs_OutputDebugStringF;
-        CRITICAL_BLOCK(cs_OutputDebugStringF)
-        {
-            static char pszBuffer[50000];
-            static char* pend;
-            if (pend == NULL)
-                pend = pszBuffer;
-            va_list arg_ptr;
-            va_start(arg_ptr, pszFormat);
-            int limit = END(pszBuffer) - pend - 2;
-            int ret = _vsnprintf(pend, limit, pszFormat, arg_ptr);
-            va_end(arg_ptr);
-            if (ret < 0 || ret >= limit)
-            {
-                pend = END(pszBuffer) - 2;
-                *pend++ = '\n';
-            }
-            else
-                pend += ret;
-            *pend = '\0';
-            char* p1 = pszBuffer;
-            char* p2;
-            while (p2 = strchr(p1, '\n'))
-            {
-                p2++;
-                char c = *p2;
-                *p2 = '\0';
-                OutputDebugStringA(p1);
-                *p2 = c;
-                p1 = p2;
-            }
-            if (p1 != pszBuffer)
-                memmove(pszBuffer, p1, pend - p1 + 1);
-            pend -= (p1 - pszBuffer);
-        }
-    }
-#endif
-    return ret;
-}
-
 
 // Safer snprintf
 //  - prints up to limit-1 characters
@@ -441,32 +367,7 @@ void ParseParameters(int argc, char* argv[])
 
 const char* wxGetTranslation(const char* pszEnglish)
 {
-    // Wrapper of wxGetTranslation returning the same const char* type as was passed in
-    static CCriticalSection cs;
-    CRITICAL_BLOCK(cs)
-    {
-        // Look in cache
-        static map<string, char*> mapCache;
-        map<string, char*>::iterator mi = mapCache.find(pszEnglish);
-        if (mi != mapCache.end())
-            return (*mi).second;
-
-        // wxWidgets translation
-        wxString strTranslated = wxGetTranslation(wxString(pszEnglish, wxConvUTF8));
-
-        // We don't cache unknown strings because caller might be passing in a
-        // dynamic string and we would keep allocating memory for each variation.
-        if (strcmp(pszEnglish, strTranslated.utf8_str()) == 0)
-            return pszEnglish;
-
-        // Add to cache, memory doesn't need to be freed.  We only cache because
-        // we must pass back a pointer to permanently allocated memory.
-        char* pszCached = new char[strlen(strTranslated.utf8_str())+1];
-        strcpy(pszCached, strTranslated.utf8_str());
-        mapCache[pszEnglish] = pszCached;
-        return pszCached;
-    }
-    return NULL;
+  return pszEnglish;
 }
 
 
@@ -510,8 +411,6 @@ void PrintException(std::exception* pex, const char* pszThread)
     FormatException(pszMessage, pex, pszThread);
     printf("\n\n************************\n%s\n", pszMessage);
     fprintf(stderr, "\n\n************************\n%s\n", pszMessage);
-    if (wxTheApp && !fDaemon && fGUI)
-        MyMessageBox(pszMessage, "Error", wxOK | wxICON_ERROR);
     throw;
     //DebugBreak();
 }

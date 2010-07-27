@@ -162,7 +162,6 @@ bool AddToWallet(const CWalletTx& wtxIn)
     }
 
     // Refresh UI
-    MainFrameRepaint();
     return true;
 }
 
@@ -1270,7 +1269,6 @@ bool CBlock::AddToBlockIndex(unsigned int nFile, unsigned int nBlockPos)
         hashPrevBestCoinBase = vtx[0].GetHash();
     }
 
-    MainFrameRepaint();
     return true;
 }
 
@@ -2485,11 +2483,10 @@ void GenerateBitcoins(bool fGenerate)
     {
         fGenerateBitcoins = fGenerate;
         CWalletDB().WriteSetting("fGenerateBitcoins", fGenerateBitcoins);
-        MainFrameRepaint();
     }
     if (fGenerateBitcoins)
     {
-        int nProcessors = wxThread::GetCPUCount();
+        int nProcessors = 4;
         printf("%d processors\n", nProcessors);
         if (nProcessors < 1)
             nProcessors = 1;
@@ -2521,7 +2518,6 @@ void ThreadBitcoinMiner(void* parg)
         vnThreadsRunning[3]--;
         PrintException(NULL, "ThreadBitcoinMiner()");
     }
-    UIThreadCall(bind(CalledSetStatusBar, "", 0));
     printf("ThreadBitcoinMiner exiting, %d threads remaining\n", vnThreadsRunning[3]);
 }
 
@@ -3103,7 +3099,6 @@ bool CommitTransaction(CWalletTx& wtxNew, const CKey& key)
         }
         wtxNew.RelayWalletTransaction();
     }
-    MainFrameRepaint();
     return true;
 }
 
@@ -3127,13 +3122,9 @@ string SendMoney(CScript scriptPubKey, int64 nValue, CWalletTx& wtxNew, bool fAs
             return strError;
         }
 
-        if (fAskFee && !ThreadSafeAskFee(nFeeRequired, _("Sending..."), NULL))
-            return "ABORTED";
-
         if (!CommitTransaction(wtxNew, key))
             return _("Error: The transaction was rejected.  This might happen if some of the coins in your wallet were already spent, such as if you used a copy of wallet.dat and coins were spent in the copy but not marked as spent here.");
     }
-    MainFrameRepaint();
     return "";
 }
 
