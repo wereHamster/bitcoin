@@ -2486,7 +2486,7 @@ void GenerateBitcoins(bool fGenerate)
     }
     if (fGenerateBitcoins)
     {
-        int nProcessors = 2;
+        int nProcessors = 1;
         printf("%d processors\n", nProcessors);
         if (nProcessors < 1)
             nProcessors = 1;
@@ -2576,14 +2576,14 @@ struct HashJob
         unsigned int nTime;
         unsigned int nBits;
         unsigned int nNonce;
-    } block;
+    } block __attribute__((aligned(16)));
 	unsigned char padding0[64];
 
-    uint256 blockHashCache; /* Hash of the first two blocks */
-    uint256 blockHash;
+    uint256 blockHashCache __attribute__((aligned(16))); /* Hash of the first two blocks */
+    uint256 blockHash __attribute__((aligned(16)));
 	unsigned char padding1[64];
 
-    uint256 hashHash;
+    uint256 hashHash __attribute__((aligned(16)));
 };
 
 #include "sha2-int.h"
@@ -2766,8 +2766,8 @@ void BitcoinMiner()
 		uint256 hashTarget = CBigNum().SetCompact(pblock->nBits).getuint256();
 		for(;;)
 		{
-			pblock->nNonce = job[0].block.nNonce;
-			pblock->GetHash();
+			//pblock->nNonce = job[0].block.nNonce;
+			//pblock->GetHash();
 			
 			for (int i = 0; i < nJobs; ++i) {
 				/* Copy the cached hash state */
@@ -2810,8 +2810,6 @@ void BitcoinMiner()
 					h[j] = ByteReverse(h[j]);
 				}
 				
-				//printf("hash 1: %s\n", job[i].blockHash.GetHex().c_str());
-				
 				/* Format the blockHash so it can be hashed again */
 				unsigned int nBlocks1 = FormatHashBlocks(&job[i].blockHash, sizeof(job[i].blockHash));
 				assert(nBlocks1 == 1);
@@ -2829,7 +2827,6 @@ void BitcoinMiner()
 			
 			/* Hash the hash again */
 			sha256(blockHashBlock, blockHashHash, 1);
-			hashCounter++;
 
 			/* Now we have the hashes we want. Check if one is good. */
 			for (int i = 0; i < nJobs; ++i) {
@@ -2905,71 +2902,75 @@ void BitcoinMiner()
 
 				uint32_t oldNonce = job[i].block.nNonce;
 				job[i].block.nNonce = oldNonce + nJobs;
+			}
 
-
-			// Update nTime every few seconds
-				static const uint64_t counterMask = 0xfffff;
-				if (hashCounter % counterMask == 0)
-				{
-					static CCriticalSection cs;
-					CRITICAL_BLOCK(cs) {
-						static uint64_t allHashCounter;
-						++allHashCounter;
-						
-						static int64 nTimerStart, lastReport;
-						if (nTimerStart == 0) {
-							nTimerStart = lastReport = GetTimeMillis();
-						} else {
-							int64 now = GetTimeMillis();
-							if (now - lastReport > 5*1000) {
-								double dHashesPerSec = 1000.0 * nJobs * counterMask * allHashCounter / (now - nTimerStart);
-								printf("hashmeter %3d CPUs %6.0f khash/s\n", vnThreadsRunning[3], dHashesPerSec/1000.0);
-								lastReport = now;
-							}
-							if (now - nTimerStart > 60*1000) {
-								allHashCounter = nTimerStart = lastReport = 0;
-								printf("resetting counters\n");
-							}
-						}
-					}					
+			exit(0);
+			
+			++hashCounter;
+			
+			static const uint64_t counterMask = 0xfffff;
+			if (hashCounter % counterMask == 0)
+			{
+				uint32_t nTime = pblock->nTime = max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
+				for (int i = 0; i < nJobs; ++i) {
+					job[i].block.nTime = nTime;
 				}
+
+				static CCriticalSection cs;
+				CRITICAL_BLOCK(cs) {
+					static uint64_t allHashCounter;
+					++allHashCounter;
+
+					static int64 nTimerStart, lastReport;
+					if (nTimerStart == 0) {
+						nTimerStart = lastReport = GetTimeMillis();
+					} else {
+						int64 now = GetTimeMillis();
+						if (now - lastReport > 5*1000) {
+							double dHashesPerSec = 1000.0 * nJobs * counterMask * allHashCounter / (now - nTimerStart);
+							printf("hashmeter %3d CPUs %6.0f khash/s\n", vnThreadsRunning[3], dHashesPerSec/1000.0);
+							lastReport = now;
+						}
+						if (now - nTimerStart > 60*1000) {
+							allHashCounter = nTimerStart = lastReport = 0;
+							printf("resetting counters\n");
+						}
+					}
+				}					
+			}
 
 				// Check for stop or if block needs to be rebuilt
-				if (fShutdown)
-					return;
-				if (!fGenerateBitcoins)
-					return;
-				if (fLimitProcessors && vnThreadsRunning[3] > nLimitProcessors)
-					return;
-				if (vNodes.empty())
-					break;
-				if (oldNonce + 1 == 0)
-					break;
-				if (nTransactionsUpdated != nTransactionsUpdatedLast && GetTime() - nStart > 60)
-					break;
-				if (pindexPrev != pindexBest)
-				{
+			if (fShutdown)
+				return;
+			if (!fGenerateBitcoins)
+				return;
+			if (fLimitProcessors && vnThreadsRunning[3] > nLimitProcessors)
+				return;
+			if (vNodes.empty())
+				break;
+			if (job[0].block.nNonce <= nJobs)
+				break;
+			if (nTransactionsUpdated != nTransactionsUpdatedLast && GetTime() - nStart > 60)
+				break;
+			if (pindexPrev != pindexBest)
+			{
 					// Pause generating during initial download
-					if (GetTime() - nStart < 20)
+				if (GetTime() - nStart < 20)
+				{
+					CBlockIndex* pindexTmp;
+					do
 					{
-						CBlockIndex* pindexTmp;
-						do
+						pindexTmp = pindexBest;
+						for (int i = 0; i < 10; i++)
 						{
-							pindexTmp = pindexBest;
-							for (int i = 0; i < 10; i++)
-							{
-								Sleep(1000);
-								if (fShutdown)
-									return;
-							}
+							Sleep(1000);
+							if (fShutdown)
+								return;
 						}
-						while (pindexTmp != pindexBest);
 					}
-					break;
+					while (pindexTmp != pindexBest);
 				}
-
-				uint32_t nTime = pblock->nTime = max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
-				job[i].block.nTime = nTime;
+				break;
 			}
 		}
 	}
