@@ -2591,12 +2591,13 @@ extern "C" void __sha256_int(__sha256_block_t *blk[4], __sha256_hash_t *hash[4])
 
 static void sha256(__sha256_block_t *blk[4], __sha256_hash_t *hash[4], int nBlocks)
 {
-  for (int i = 0; i < nBlocks; ++i) {
-    __sha256_int(blk, hash);
-    for (int j = 0; j < 4; ++j) {
-      blk[j] += 1;
-    }
-  }
+	for (int i = 0; i < nBlocks; ++i) {
+		printf("hashing %p\n", blk[0]);
+		__sha256_int(blk, hash);
+		for (int j = 0; j < 4; ++j) {
+			++blk[j];
+		}
+	}
 }
 
 std::string GetHex(unsigned char *pn)
@@ -2728,15 +2729,21 @@ void BitcoinMiner()
 		    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
 		};
 		//printf("preparing jobs\n");
+		
+		pblock->hashPrevBlock  = (pindexPrev ? pindexPrev->GetBlockHash() : 0);
+		pblock->hashMerkleRoot = pblock->BuildMerkleTree();
+		pblock->nTime          = max((pindexPrev ? pindexPrev->GetMedianTimePast()+1 : 0), GetAdjustedTime());
+		pblock->nBits          = nBits;
+		
 		const int nJobs = 4;
 		struct HashJob job[nJobs];
-		for (int i = 0; i < nJobs; ++i) {
+		for (int i = 0; i < nJobs; ++i) {				
 			job[i].block.nVersion       = pblock->nVersion;
-			job[i].block.hashPrevBlock  = pblock->hashPrevBlock  = (pindexPrev ? pindexPrev->GetBlockHash() : 0);
-			job[i].block.hashMerkleRoot = pblock->hashMerkleRoot = pblock->BuildMerkleTree();
-			job[i].block.nTime          = pblock->nTime          = max((pindexPrev ? pindexPrev->GetMedianTimePast()+1 : 0), GetAdjustedTime());
-			job[i].block.nBits          = pblock->nBits          = nBits;
-			job[i].block.nNonce         = pblock->nNonce         = i + 1;
+			job[i].block.hashPrevBlock  = pblock->hashPrevBlock;
+			job[i].block.hashMerkleRoot = pblock->hashMerkleRoot;
+			job[i].block.nTime          = pblock->nTime;
+			job[i].block.nBits          = pblock->nBits;
+			job[i].block.nNonce         = 1;
 
 			memcpy(&job[i].blockHash, hashInitState, sizeof(hashInitState));
 			memcpy(&job[i].blockHashCache, hashInitState, sizeof(hashInitState));
