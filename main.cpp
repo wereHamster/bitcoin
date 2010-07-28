@@ -2611,7 +2611,24 @@ void BitcoinMiner()
 {
 	printf("BitcoinMiner started\n");
 	SetThreadPriority(THREAD_PRIORITY_LOWEST);
+	
+	{
+		static __sha256_block_t buffer;
+		static __sha256_hash_t h[4]; 
 
+		__sha256_block_t *block[4] = {
+			&buffer, &buffer, &buffer, &buffer
+		};
+		__sha256_hash_t *blockHashCache[4] = {
+			&h[0], &h[1], &h[2], &h[3]
+		};
+		
+		sha256(block, blockHashCache, 1);
+		for (int i = 0; i < 4; ++i) {
+			printf("hash%d: %s\n", i, GetHex((unsigned char *)h[i]).c_str());
+		}
+	}
+	
 	uint64_t hashCounter = 0;
 
 	CKey key;
@@ -2757,7 +2774,14 @@ void BitcoinMiner()
 			(__sha256_hash_t *) &job[0].blockHashCache, (__sha256_hash_t *) &job[1].blockHashCache,
 			(__sha256_hash_t *) &job[2].blockHashCache, (__sha256_hash_t *) &job[3].blockHashCache
 		};
+		
+		__sha256_block_t *bptr = block[0];
+		printf("block ptr (%p / %p): \n", &job[0].block, bptr);
+		
 		sha256(block, blockHashCache, 1);
+		
+		bptr = block[0];
+		printf("block ptr (%p / %p): \n", &job[0].block, bptr);
 		
 		//
 		// Search
@@ -2836,6 +2860,22 @@ void BitcoinMiner()
 					h[j] = ByteReverse(h[j]);
 				}
 				
+				printf("block data (%p): ", &job[i].block);
+				uint8_t *begin = (uint8_t *) &job[i].block, *end = (uint8_t *) (&job[i].block + 1);
+				for (int j = 0; j < min(80, (int)(end - begin)); ++j) {
+					printf("%02x", begin[j]);
+				} printf("\n");
+				
+				__sha256_block_t *bptr = block[i];
+				printf("second block (%p): ", *bptr);
+				begin = (uint8_t *) &(*bptr)[0];
+				for (int j = 0; j < 80-64; ++j) {
+					printf("%02x", begin[j]);
+				} printf("\n");
+				
+				printf("hash 1: %s\n", job[i].blockHash.GetHex().c_str());
+				printf("hash 2: %s\n", job[i].hashHash.GetHex().c_str());
+				
 				/* Compare with the original algorithm */
 				/*uint256 hash2;
 				struct unnamed {
@@ -2854,12 +2894,13 @@ void BitcoinMiner()
 				printf("2 bl hash: %s\n", hash2.GetHex().c_str());
 				*/
 				
-				//pblock->nNonce = job[i].block.nNonce;
+				pblock->nNonce = job[i].block.nNonce;
 				//printf("my hash 1: %s\n", job[i].blockHash.GetHex().c_str());
-				/*if (job[i].hashHash != pblock->GetHash()) {
-					printf("my hash: %s\n", job[i].hashHash.GetHex().c_str());
-					printf("bl hash: %s\n", pblock->GetHash().GetHex().c_str());
-				}*/
+				if (job[i].hashHash != pblock->GetHash()) {
+					//printf("my hash: %s\n", job[i].hashHash.GetHex().c_str());
+					//printf("bl hash: %s\n", pblock->GetHash().GetHex().c_str());
+					printf("error\n");
+				}
 				
 				if (job[i].hashHash <= hashTarget)
 				{

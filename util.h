@@ -409,19 +409,19 @@ template<typename T1>
 inline uint256 Hash(const T1 pbegin, const T1 pend)
 {
     uint256 hash1;
-	/*uint8_t *begin = (uint8_t *) &pbegin[0], *end = (uint8_t *) &pend[0];
+	uint8_t *begin = (uint8_t *) &pbegin[0], *end = (uint8_t *) &pend[0];
 	for (int i = 0; i < min(80, (int)(end - begin)); ++i) {
 		printf("%02x", begin[i]);
-	} printf("\n"); */
+	} printf("\n");
     SHA256((unsigned char*)&pbegin[0], (pend - pbegin) * sizeof(pbegin[0]), (unsigned char*)&hash1);
-	//printf("Hash1 %s\n", hash1.GetHex().c_str());
+	printf("Hash1 %s\n", hash1.GetHex().c_str());
     uint256 hash2;
-	/*begin = (uint8_t *) &hash1;
+	begin = (uint8_t *) &hash1;
 	for (int i = 0; i < 32; ++i) {
 		printf("%02x", begin[i]);
-	} printf("\n"); */
+	} printf("\n");
     SHA256((unsigned char*)&hash1, sizeof(hash1), (unsigned char*)&hash2);
-	//printf("Hash2 %s\n", hash2.GetHex().c_str());
+	printf("Hash2 %s\n", hash2.GetHex().c_str());
     return hash2;
 }
 
