@@ -133,13 +133,13 @@ static inline __m128i SHR(__m128i x, int n) {
 #define	SIGMA1_256(x)		(ROTR((x), 17) ^ ROTR((x), 19) ^ SHR((x), 10))
 
 static inline __m128i load32(uint32_t x) {
-    union { __m128i ret; uint32_t x[4]; } box;
+    union { __m128i ret; uint32_t x[4]; } box __attribute__((aligned(16)));
     box.x[0] = x;
     return box.ret;
 }
 
 static inline __m128i load_epi32(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3) {
-    union { __m128i ret; uint32_t x[4]; } box = { .x = { x0, x1, x2, x3 } };
+    union { __m128i ret; uint32_t x[4]; } box __attribute__((aligned(16))) = { .x = { x0, x1, x2, x3 } };
     return box.ret;
 }
 
@@ -150,7 +150,7 @@ static inline uint32_t store32(__m128i x) {
 }
 
 static inline void store_epi32(__m128i x, uint32_t *x0, uint32_t *x1, uint32_t *x2, uint32_t *x3) {
-    union { uint32_t ret[4]; __m128i x; } box = { .x = x };
+    union { uint32_t ret[4]; __m128i x; } box __attribute__((aligned(16))) = { .x = x };
     *x0 = box.ret[0]; *x1 = box.ret[1]; *x2 = box.ret[2]; *x3 = box.ret[3];
 }
 
@@ -177,7 +177,7 @@ static inline __m128i LOAD(const __sha256_block_t *blk[4], int i) {
 }
 
 static inline void dumpreg(__m128i x, char *msg) {
-    union { uint32_t ret[4]; __m128i x; } box = { .x = x };
+    union { uint32_t ret[4]; __m128i x; } box __attribute__((aligned(16))) = { .x = x };
     printf("%s %08x %08x %08x %08x\n", msg, box.ret[0], box.ret[1], box.ret[2], box.ret[3]);
 }
 
