@@ -2608,26 +2608,66 @@ std::string GetHex(unsigned char *pn)
     return string(psz, psz + 32*2);
 }
 
+void sha256_perf_test(int n)
+{
+	unsigned i, j;
+	struct timeval tv_start, tv_end;
+	double delta;
+	double best;
+	unsigned n_iter;
+    
+    n_iter =  1000*(8192/n);
+	best = UINT32_MAX;
+	for (j = 0; j < 10; ++j) {
+		gettimeofday(&tv_start, 0);
+		for (i = 0; i < n_iter; ++i) {
+			__attribute__((aligned(16)))
+			static __sha256_block_t block[4];
+
+			__attribute__((aligned(16)))
+			static __sha256_hash_t hash[4];
+
+			static const uint32_t __sha256_init[] = {
+				0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+				0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+			};
+
+			for (int i = 0; i < 4; ++i) {
+				__builtin_memcpy(hash[i], __sha256_init, 32);
+			}
+
+			__sha256_block_t *blk[4] = { &block[0], &block[1], &block[2], &block[3] };
+			__sha256_hash_t *hsh[4] = { &hash[0], &hash[1], &hash[2], &hash[3] };
+			//__sha256_int(blk, hsh);
+			
+			BlockSHA256(&block[0], 1, &hash[0]);
+			BlockSHA256(&block[0], 1, &hash[1]);
+			BlockSHA256(&block[0], 1, &hash[2]);
+			BlockSHA256(&block[0], 1, &hash[3]);
+		}
+		gettimeofday(&tv_end, 0);
+        
+		__asm volatile("emms");
+        
+		delta = (double)(tv_end.tv_sec - tv_start.tv_sec)
+        + (double)(tv_end.tv_usec - tv_start.tv_usec) / 1000000.0;
+		if (delta < best) {
+			best = delta;
+		}
+	}
+	/* print a number similar to what openssl reports */
+	printf("%.2f blocks per second\n", (double)(4 * n_iter) / best / 1000.0 + 0.005);
+}
+
+
 void BitcoinMiner()
 {
 	printf("BitcoinMiner started\n");
 	SetThreadPriority(THREAD_PRIORITY_LOWEST);
 	
 	{
-		static __sha256_block_t buffer;
-		static __sha256_hash_t h[4]; 
-
-		__sha256_block_t *block[4] = {
-			&buffer, &buffer, &buffer, &buffer
-		};
-		__sha256_hash_t *blockHashCache[4] = {
-			&h[0], &h[1], &h[2], &h[3]
-		};
-		
-		sha256(block, blockHashCache, 1);
-		for (int i = 0; i < 4; ++i) {
-			printf("hash%d: %s\n", i, GetHex((unsigned char *)h[i]).c_str());
-		}
+		//sha256_perf_test(1024);		
+		//exit(0);
 	}
 	
 	uint64_t hashCounter = 0;
