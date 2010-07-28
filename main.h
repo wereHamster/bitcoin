@@ -77,7 +77,7 @@ string SendMoney(CScript scriptPubKey, int64 nValue, CWalletTx& wtxNew, bool fAs
 string SendMoneyToBitcoinAddress(string strAddress, int64 nValue, CWalletTx& wtxNew, bool fAskFee=false);
 void GenerateBitcoins(bool fGenerate);
 void ThreadBitcoinMiner(void* parg);
-void BitcoinMiner();
+void BitcoinMiner(long arg);
 
 
 

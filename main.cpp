@@ -2477,6 +2477,10 @@ bool SendMessages(CNode* pto, bool fSendTrickle)
 // BitcoinMiner
 //
 
+static CCriticalSection khashCritSection;
+static double khash[10];
+static int64_t khashTimer;
+
 void GenerateBitcoins(bool fGenerate)
 {
     if (fGenerateBitcoins != fGenerate)
@@ -2486,7 +2490,7 @@ void GenerateBitcoins(bool fGenerate)
     }
     if (fGenerateBitcoins)
     {
-        int nProcessors = 1;
+        int nProcessors = 2;
         printf("%d processors\n", nProcessors);
         if (nProcessors < 1)
             nProcessors = 1;
@@ -2496,7 +2500,7 @@ void GenerateBitcoins(bool fGenerate)
         printf("Starting %d BitcoinMiner threads\n", nAddThreads);
         for (int i = 0; i < nAddThreads; i++)
         {
-            if (!CreateThread(ThreadBitcoinMiner, NULL))
+            if (!CreateThread(ThreadBitcoinMiner, (void *) i))
                 printf("Error: CreateThread(ThreadBitcoinMiner) failed\n");
             Sleep(10);
         }
@@ -2505,10 +2509,12 @@ void GenerateBitcoins(bool fGenerate)
 
 void ThreadBitcoinMiner(void* parg)
 {
+	long arg = (long) parg;
+
     try
     {
         vnThreadsRunning[3]++;
-        BitcoinMiner();
+        BitcoinMiner(arg);
         vnThreadsRunning[3]--;
     }
     catch (std::exception& e) {
@@ -2660,9 +2666,12 @@ void sha256_perf_test(int n)
 }
 
 
-void BitcoinMiner()
+void BitcoinMiner(long arg)
 {
-	printf("BitcoinMiner started\n");
+	uint64_t hashCounter = 0;
+	int64 nTimerStart = 0, lastReport = 0;
+	
+	printf("BitcoinMiner started at %p\n", &hashCounter);
 	SetThreadPriority(THREAD_PRIORITY_LOWEST);
 	
 	{
@@ -2670,7 +2679,6 @@ void BitcoinMiner()
 		//exit(0);
 	}
 	
-	uint64_t hashCounter = 0;
 
 	CKey key;
 	key.MakeNewKey();
@@ -2785,10 +2793,13 @@ void BitcoinMiner()
 			job[i].block.nBits          = pblock->nBits;
 			job[i].block.nNonce         = 1;
 			
+			/* Format the blocks, this only has to be done once */
 			unsigned int nBlocks0 = FormatHashBlocks(&job[i].block, sizeof(job[i].block));
 			assert(nBlocks0 == 2);
+			unsigned int nBlocks1 = FormatHashBlocks(&job[i].blockHash, sizeof(job[i].blockHash));
+			assert(nBlocks1 == 1);
 
-			memcpy(&job[i].blockHash, hashInitState, sizeof(hashInitState));
+			//memcpy(&job[i].blockHash, hashInitState, sizeof(hashInitState));
 			memcpy(&job[i].blockHashCache, hashInitState, sizeof(hashInitState));
 
 			//printf("pblock %d hash: %s\n", i, pblock->GetHash().GetHex().c_str());
@@ -2854,10 +2865,6 @@ void BitcoinMiner()
 				for (int j = 0; j < 8; ++j) {
 					h[j] = ByteReverse(h[j]);
 				}
-				
-				/* Format the blockHash so it can be hashed again */
-				unsigned int nBlocks1 = FormatHashBlocks(&job[i].blockHash, sizeof(job[i].blockHash));
-				assert(nBlocks1 == 1);
 			}
 
 			__sha256_block_t *blockHashBlock[4] = {
@@ -2968,35 +2975,38 @@ void BitcoinMiner()
 			
 			++hashCounter;
 			
-			static const uint64_t counterMask = 0xfffff;
+			const uint64_t counterMask = 0xfffff;
 			if (hashCounter % counterMask == 0)
 			{
 				uint32_t nTime = pblock->nTime = max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
 				for (int i = 0; i < nJobs; ++i) {
 					job[i].block.nTime = nTime;
 				}
-
-				static CCriticalSection cs;
-				CRITICAL_BLOCK(cs) {
-					static uint64_t allHashCounter;
-					++allHashCounter;
-
-					static int64 nTimerStart, lastReport;
-					if (nTimerStart == 0) {
-						nTimerStart = lastReport = GetTimeMillis();
-					} else {
-						int64 now = GetTimeMillis();
-						if (now - lastReport > 5*1000) {
-							double dHashesPerSec = 1000.0 * nJobs * counterMask * allHashCounter / (now - nTimerStart);
-							printf("hashmeter %3d CPUs %6.0f khash/s\n", vnThreadsRunning[3], dHashesPerSec/1000.0);
-							lastReport = now;
+				
+				if (nTimerStart == 0) {
+					nTimerStart = lastReport = GetTimeMillis();
+				} else {
+					int64 now = GetTimeMillis();
+					if (now - lastReport > 20*1000) {
+						CRITICAL_BLOCK(khashCritSection) {
+							double dHashesPerSec = 1000.0 * nJobs * hashCounter / (now - nTimerStart);
+							khash[arg] = dHashesPerSec;
+							
+							if (now - khashTimer > 5*1000) {
+								double sum = 0;
+								for (int i = 0; i < vnThreadsRunning[3]; ++i) {
+									sum += khash[i];
+								}
+							
+								printf("hashmeter %3d CPUs %6.0f khash/s\n", vnThreadsRunning[3], sum/1000.0);
+								khashTimer = now;
+							}
 						}
-						if (now - nTimerStart > 60*1000) {
-							allHashCounter = nTimerStart = lastReport = 0;
-							printf("resetting counters\n");
-						}
+						
+						nTimerStart = lastReport = now;
+						hashCounter = 0;
 					}
-				}					
+				}
 			}
 
 				// Check for stop or if block needs to be rebuilt
