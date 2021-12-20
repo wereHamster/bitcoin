@@ -364,7 +364,7 @@ namespace json_spirit
        throw reason;
     }
 
-    // the spirit grammer 
+    // the spirit grammar 
     //
     template< class Value_type, class Iter_type >
     class Json_grammer : public spirit_namespace::grammar< Json_grammer< Value_type, Iter_type > >
